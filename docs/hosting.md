@@ -35,7 +35,7 @@ time** and **runaway bugs**, and both are capped below.
 
 ### Runtime limits (systemd)
 
-`deploy/kanban.service` (to be written in M0) will include:
+[`deploy/kanban.service`](../deploy/kanban.service) includes (abridged):
 
 ```ini
 [Service]
@@ -43,7 +43,7 @@ User=kanban
 Group=kanban
 ExecStart=/usr/local/bin/kanban
 Environment=KANBAN_BIND=0.0.0.0:8080
-Environment=KANBAN_DATABASE_URL=sqlite:///var/lib/kanban/kanban.db?mode=rwc
+Environment=KANBAN_DB_PATH=/var/lib/kanban/kanban.db
 StateDirectory=kanban
 Restart=on-failure
 
@@ -112,13 +112,14 @@ Do **not** port-forward 8080 on the router. If remote access is wanted later, us
 (`sqlite3` CLI isn't installed yet: `sudo apt install sqlite3`. Alternatively the binary can expose
 `kanban backup <path>` using SQLite's `VACUUM INTO`, which avoids the dependency. That's the plan for M5.)
 
-## One-time setup checklist
+## Setup and upgrades
 
 ```bash
-# Rust toolchain (user-level, no sudo)
+# Rust toolchain (user-level, no sudo). Already done on 2026-10-08.
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Service user + firewall (sudo)
-sudo useradd --system --home /var/lib/kanban --shell /usr/sbin/nologin kanban
-sudo ufw allow from 192.168.4.0/22 to any port 8080 proto tcp comment 'kanban LAN'
+# Install or upgrade: builds at low priority, then runs `sudo deploy/install.sh`, which
+# creates the `kanban` user, installs the binary and unit, (re)starts the service, adds the
+# ufw LAN rule if ufw is active, and checks /api/health.
+make install
 ```

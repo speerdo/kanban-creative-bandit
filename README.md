@@ -5,7 +5,30 @@ List and board views, fast status changes, strong color coding, light/dark theme
 and per-user custom colors. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
-> **Status:** Blueprint stage. No application code yet. Start with [`docs/`](docs/README.md).
+> **Status:** M0 (scaffold): server + frontend skeleton with a health check. See the [roadmap](docs/blueprint.md#8-roadmap).
+
+## Quick start
+
+Requires Rust (`rustup`) and Node 20+. Run `make help` to list every target.
+
+**Develop:** run these in two terminals:
+
+```bash
+make dev-server   # Rust API on :8080, creates data/kanban.db
+make dev-web      # Vite on http://localhost:5173 with hot reload, proxies /api to :8080
+```
+
+**Deploy on the home server:**
+
+```bash
+make install      # builds frontend + release binary, then runs sudo deploy/install.sh
+```
+
+The installer creates the `kanban` system user, installs the systemd unit (resource-capped so the
+trading bot always wins) and opens port 8080 to the LAN only if `ufw` is active. Then open
+`http://192.168.4.32:8080` from any device on the home network.
+
+Upgrade: `git pull && make install`. Logs: `journalctl -u kanban -f`.
 
 ## At a glance
 

@@ -1,0 +1,11 @@
+[workspace]
+members = ["server"]
+resolver = "3"
+
+[profile.release]
+# Small binary; we care more about footprint than peak throughput.
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+panic = "abort"

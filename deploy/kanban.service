@@ -1,0 +1,42 @@
+[Unit]
+Description=Kanban (team task tracker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kanban
+Group=kanban
+ExecStart=/usr/local/bin/kanban
+Environment=KANBAN_BIND=0.0.0.0:8080
+Environment=KANBAN_DB_PATH=/var/lib/kanban/kanban.db
+Environment=RUST_LOG=info
+StateDirectory=kanban
+StateDirectoryMode=0750
+Restart=on-failure
+RestartSec=3
+
+# Yield to the trading bot under contention (see docs/hosting.md)
+Nice=10
+CPUWeight=20
+IOWeight=20
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=64
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/kanban
+
+[Install]
+WantedBy=multi-user.target

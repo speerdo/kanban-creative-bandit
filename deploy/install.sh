@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Install or upgrade the kanban service. Run with sudo:
+#   sudo deploy/install.sh target/release/kanban
+# Idempotent: safe to re-run for every upgrade.
+set -euo pipefail
+
+BIN_SRC="${1:-target/release/kanban}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LAN_SUBNET="${LAN_SUBNET:-192.168.4.0/22}"
+PORT=8080
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Run with sudo." >&2
+  exit 1
+fi
+if [[ ! -x "$BIN_SRC" ]]; then
+  echo "Binary not found at $BIN_SRC. Run 'make release' first." >&2
+  exit 1
+fi
+
+if ! id kanban &>/dev/null; then
+  useradd --system --home-dir /var/lib/kanban --no-create-home --shell /usr/sbin/nologin kanban
+  echo "Created system user 'kanban'."
+fi
+
+install -m 0755 "$BIN_SRC" /usr/local/bin/kanban
+install -m 0644 "$SCRIPT_DIR/kanban.service" /etc/systemd/system/kanban.service
+systemctl daemon-reload
+systemctl enable kanban.service >/dev/null
+systemctl restart kanban.service
+
+if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+  ufw allow from "$LAN_SUBNET" to any port "$PORT" proto tcp comment 'kanban LAN' >/dev/null
+  echo "Firewall: allowed $LAN_SUBNET -> :$PORT."
+else
+  echo "Note: ufw is not active, so :$PORT is reachable by anything that can reach this host."
+fi
+
+sleep 1
+if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null; then
+  echo "kanban is running: http://$(hostname -I | awk '{print $1}'):$PORT"
+else
+  echo "Service did not respond. Check: journalctl -u kanban -n 50" >&2
+  exit 1
+fi
