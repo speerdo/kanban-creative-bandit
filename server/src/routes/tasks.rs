@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
 
 use super::{List, Placement, projects, statuses};
@@ -262,6 +263,7 @@ async fn create(
 
     let task = fetch(&mut tx, id).await?;
     tx.commit().await?;
+    announce(&state, me.id, "task.created", &task).await;
     Ok((StatusCode::CREATED, Json(task)))
 }
 
@@ -287,7 +289,7 @@ struct UpdateBody {
 
 async fn update(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
     Json(body): Json<UpdateBody>,
 ) -> AppResult<Json<Task>> {
@@ -343,6 +345,7 @@ async fn update(
 
     let task = fetch(&mut tx, id).await?;
     tx.commit().await?;
+    announce(&state, me.id, "task.updated", &task).await;
     Ok(Json(task))
 }
 
@@ -359,7 +362,7 @@ struct MoveBody {
 /// The single drag-and-drop endpoint: change status and/or position in one call.
 async fn move_task(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
     Json(body): Json<MoveBody>,
 ) -> AppResult<Json<Task>> {
@@ -374,6 +377,7 @@ async fn move_task(
     .await?;
     let task = fetch(&mut tx, id).await?;
     tx.commit().await?;
+    announce(&state, me.id, "task.moved", &task).await;
     Ok(Json(task))
 }
 
@@ -415,20 +419,38 @@ async fn place(
 
 async fn remove(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
 ) -> AppResult<StatusCode> {
-    let done = sqlx::query("DELETE FROM tasks WHERE id = ?")
-        .bind(id)
-        .execute(&state.db)
-        .await?;
-    if done.rows_affected() == 0 {
-        return Err(AppError::NotFound);
-    }
+    let (project_id, parent): (i64, Option<i64>) =
+        sqlx::query_as("DELETE FROM tasks WHERE id = ? RETURNING project_id, parent_task_id")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    let gone = json!({ "id": id, "project_id": project_id, "parent_task_id": parent });
+    state.events.send("task.deleted", me.id, gone);
+    announce_parent(&state, me.id, parent).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
 // ---- helpers ----------------------------------------------------------------------------
+
+/// Broadcasts a task change, plus its parent's (whose subtask counts just changed).
+async fn announce(state: &AppState, by: i64, kind: &'static str, task: &Task) {
+    state.events.send(kind, by, task);
+    announce_parent(state, by, task.parent_task_id).await;
+}
+
+async fn announce_parent(state: &AppState, by: i64, parent: Option<i64>) {
+    let Some(parent) = parent else { return };
+    let Ok(mut conn) = state.db.acquire().await else {
+        return;
+    };
+    if let Ok(parent) = fetch(&mut conn, parent).await {
+        state.events.send("task.updated", by, parent);
+    }
+}
 
 /// The first status of a project, optionally only of one category.
 async fn first_status(

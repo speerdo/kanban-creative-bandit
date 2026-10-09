@@ -14,6 +14,9 @@ use crate::{AppState, app, auth, db};
 struct Client {
     app: Router,
     cookie: Option<String>,
+    events: crate::events::Hub,
+    /// Dropping this would end every event stream.
+    _stop: tokio::sync::watch::Sender<bool>,
     _dir: TempDir,
 }
 
@@ -50,9 +53,15 @@ impl Client {
             .await
             .unwrap();
         }
+        let (events, stop) = crate::events::Hub::new();
         let mut c = Self {
-            app: app(AppState { db: pool }),
+            app: app(AppState {
+                db: pool,
+                events: events.clone(),
+            }),
             cookie: None,
+            events,
+            _stop: stop,
             _dir: TempDir(dir),
         };
         let (status, _) = c
@@ -399,4 +408,70 @@ async fn subtasks_are_listed_under_their_parent() {
         )
         .await;
     assert_eq!(titles(&subs), ["child"]);
+}
+
+#[tokio::test]
+async fn changes_are_broadcast() {
+    let mut c = Client::new().await;
+    let mut rx = c.events.subscribe();
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "P"})))
+        .await;
+    let parent = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(json!({"project_id": p["id"], "title": "parent"})),
+        )
+        .await;
+    let child = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(json!({"parent_task_id": parent["id"], "title": "child"})),
+        )
+        .await;
+    c.ok(Method::DELETE, &format!("/api/tasks/{}", child["id"]), None)
+        .await;
+
+    let mut seen = vec![];
+    while let Ok(e) = rx.try_recv() {
+        assert_eq!(e.by, 1, "adam made every change");
+        seen.push((e.kind, e.data["id"].as_i64()));
+    }
+    let (pid, parent_id, child_id) = (
+        p["id"].as_i64(),
+        parent["id"].as_i64(),
+        child["id"].as_i64(),
+    );
+    assert_eq!(
+        seen,
+        [
+            ("project.created", pid),
+            ("task.created", parent_id),
+            ("task.created", child_id),
+            ("task.updated", parent_id), // its subtask count changed
+            ("task.deleted", child_id),
+            ("task.updated", parent_id),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn event_stream_requires_sign_in_and_says_hello() {
+    let mut c = Client::new().await;
+    let req = Request::get("/api/events")
+        .header(header::COOKIE, c.cookie.clone().unwrap())
+        .body(Body::empty())
+        .unwrap();
+    let res = c.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "text/event-stream");
+    let mut body = res.into_body();
+    let frame = body.frame().await.unwrap().unwrap().into_data().unwrap();
+    assert!(String::from_utf8_lossy(&frame).starts_with("event: hello"));
+
+    c.call(Method::POST, "/api/auth/logout", None).await;
+    let (status, _) = c.call(Method::GET, "/api/events", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

@@ -6,8 +6,8 @@ and per-user custom colors, plus a calendar that syncs with Google Calendar and
 Gmail/Drive/Keep hooks. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
-> **Status:** M1 (core tasks): sign-in, projects, per-project statuses, list view, status pills, quick add.
-> Next up: M2 (board view + live sync). Google Calendar/Gmail/Drive/Keep are planned for M6–M7.
+> **Status:** M2 (board): list and board views with drag and drop, and live sync between browsers.
+> Next up: M3 (color and themes). Google Calendar, Gmail, Drive and shared Lists are planned for M6–M7.
 > See the [roadmap](docs/blueprint.md#8-roadmap).
 
 ## Quick start

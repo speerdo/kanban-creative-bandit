@@ -55,7 +55,14 @@
   const PRIORITY_ICON: Record<Priority, string> = { none: '–', low: '↓', medium: '=', high: '↑', urgent: '‼' };
 </script>
 
-<div class="row" class:done role="listitem" style:--stripe={priorityColor ? solid(priorityColor) : 'transparent'}>
+<div
+  class="row"
+  class:done
+  role="listitem"
+  data-task={task.id}
+  style:--stripe={priorityColor ? solid(priorityColor) : 'transparent'}
+>
+  <span class="grip" title="Drag to move" aria-hidden="true">⠿</span>
   <input
     type="checkbox"
     class="check"
@@ -150,7 +157,7 @@
     align-items: center;
     gap: 10px;
     min-height: 40px;
-    padding: 2px 4px 2px 10px;
+    padding: 2px 4px 2px 0;
     border-bottom: 1px solid var(--border);
     box-shadow: inset 3px 0 0 var(--stripe);
     background: var(--surface);
@@ -158,6 +165,22 @@
 
   .row:hover {
     background: var(--hover);
+  }
+
+  .grip {
+    flex: none;
+    width: 14px;
+    margin-left: 2px;
+    margin-right: -6px;
+    color: var(--text-muted);
+    cursor: grab;
+    opacity: 0;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .row:hover .grip {
+    opacity: 1;
   }
 
   .check {
@@ -285,6 +308,11 @@
     opacity: 1;
   }
 
+  :global(.row.drag-ghost) {
+    opacity: 0.4;
+    background: var(--surface-2);
+  }
+
   @media (max-width: 760px) {
     .row {
       flex-wrap: wrap;
@@ -292,12 +320,12 @@
     }
 
     .title {
-      flex-basis: calc(100% - 40px);
+      flex-basis: calc(100% - 60px);
     }
 
     .cells {
       width: 100%;
-      padding-left: 26px;
+      padding-left: 38px;
     }
 
     .due.empty,
@@ -308,7 +336,8 @@
 
   @media (hover: none) {
     .due.empty,
-    .more {
+    .more,
+    .grip {
       opacity: 1;
     }
   }

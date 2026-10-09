@@ -25,7 +25,7 @@ We need a self-hosted kanban/list task tracker for two people. Requirements and 
 | Packaging | Frontend `dist/` embedded into the binary with **rust-embed**, so it ships as one file |
 | Live sync | **Server-Sent Events** (`axum::response::sse`) fed by a `tokio::sync::broadcast` channel |
 | Auth | argon2id password hashes + opaque session cookie |
-| Drag and drop | `svelte-dnd-action` (or SortableJS), chosen during M2 based on touch support |
+| Drag and drop | **SortableJS** (chosen in M2: no framework coupling, mature touch support with press-to-drag, so swipes still scroll on phones) |
 | Process mgmt | **systemd** unit with CPU/IO/memory limits. No Docker. |
 
 ## Alternatives considered

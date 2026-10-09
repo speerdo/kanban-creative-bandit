@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../api';
   import { solid } from '../colors';
-  import { failed, go, router, session, workspace } from '../state.svelte';
+  import { failed, go, lastView, router, session, workspace } from '../state.svelte';
   import Avatar from './Avatar.svelte';
 
   let { onquickadd }: { onquickadd: () => void } = $props();
@@ -31,6 +31,8 @@
   }
 
   const current = $derived(router.route.name === 'project' ? router.route.id : null);
+  // Switching projects keeps the current view.
+  const view = $derived(router.route.name === 'project' ? router.route.view : lastView());
 </script>
 
 <nav>
@@ -44,7 +46,7 @@
   <ul>
     {#each workspace.projects as p (p.id)}
       <li>
-        <a href="#/p/{p.id}" class:active={p.id === current} aria-current={p.id === current ? 'page' : undefined}>
+        <a href="#/p/{p.id}/{view}" class:active={p.id === current} aria-current={p.id === current ? 'page' : undefined}>
           <span class="dot" style:background={solid(p.color)}></span>
           <span class="name">{p.name}</span>
         </a>

@@ -41,18 +41,41 @@ export function failed(e: unknown): false {
   return false;
 }
 
-// ---- routing (hash based: #/p/3) -----------------------------------------------------------
+// ---- routing (hash based: #/p/3 or #/p/3/board) -------------------------------------------
 
-export type Route = { name: 'home' } | { name: 'project'; id: number };
+export type View = 'list' | 'board';
+export type Route = { name: 'home' } | { name: 'project'; id: number; view: View };
+
+const VIEW_KEY = 'kanban.view';
+
+/** The last view used, so opening a project from the sidebar keeps it (server prefs in M3). */
+export function lastView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list';
+  } catch {
+    return 'list';
+  }
+}
 
 function parse(hash: string): Route {
-  const m = /^#\/p\/(\d+)/.exec(hash);
-  return m ? { name: 'project', id: Number(m[1]) } : { name: 'home' };
+  const m = /^#\/p\/(\d+)(?:\/(list|board))?/.exec(hash);
+  if (!m) return { name: 'home' };
+  return { name: 'project', id: Number(m[1]), view: (m[2] as View | undefined) ?? lastView() };
 }
 
 export const router = $state<{ route: Route }>({ route: parse(location.hash) });
 window.addEventListener('hashchange', () => (router.route = parse(location.hash)));
 
-export function go(route: Route) {
-  location.hash = route.name === 'project' ? `#/p/${route.id}` : '#/';
+export function go(route: { name: 'home' } | { name: 'project'; id: number; view?: View }) {
+  if (route.name === 'home') {
+    location.hash = '#/';
+    return;
+  }
+  const view = route.view ?? lastView();
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    /* not remembered; fine */
+  }
+  location.hash = `#/p/${route.id}/${view}`;
 }

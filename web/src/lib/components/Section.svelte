@@ -1,35 +1,23 @@
 <!-- One status as a collapsible list section: colored header, its tasks, and an inline add row. -->
 <script lang="ts">
   import { untrack } from 'svelte';
-  import type { Category, NewTask, Status, Task, TaskPatch } from '../api';
+  import type { Category, Status } from '../api';
   import { ink, solid } from '../colors';
+  import type { ProjectStore } from '../project.svelte';
   import { parseQuickAdd } from '../quickadd';
+  import { sortable } from '../sortable';
   import { people } from '../state.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
   import Popover from './Popover.svelte';
   import TaskRow from './TaskRow.svelte';
 
-  let {
-    status,
-    statuses,
-    tasks,
-    onupdatetask,
-    oncreatetask,
-    ondeletetask,
-    onupdatestatus,
-    onaddstatus,
-    ondeletestatus,
-  }: {
-    status: Status;
-    statuses: Status[];
-    tasks: Task[];
-    onupdatetask: (task: Task, patch: TaskPatch) => void;
-    oncreatetask: (t: NewTask) => Promise<boolean>;
-    ondeletetask: (task: Task) => void;
-    onupdatestatus: (patch: Partial<Pick<Status, 'name' | 'color' | 'category'>>) => void;
-    onaddstatus: () => void;
-    ondeletestatus: (moveTo?: number) => void;
-  } = $props();
+  let { status, store }: { status: Status; store: ProjectStore } = $props();
+
+  const statuses = $derived(store.statuses);
+  const tasks = $derived(store.byStatus.get(status.id) ?? []);
+  const onupdatestatus = (patch: Partial<Pick<Status, 'name' | 'color' | 'category'>>) => store.updateStatus(status, patch);
+  const ondeletestatus = (moveTo?: number) => store.deleteStatus(status, moveTo);
+  const onaddstatus = () => store.addStatus(status);
 
   // A status id never changes for a mounted section.
   const KEY = `kanban.collapsed.${untrack(() => status.id)}`;
@@ -60,7 +48,7 @@
     e.preventDefault();
     const parsed = parseQuickAdd(draft, people.users);
     if (!parsed.title) return;
-    const ok = await oncreatetask({
+    const ok = await store.createTask({
       status_id: status.id,
       title: parsed.title,
       priority: parsed.priority,
@@ -150,17 +138,30 @@
   </div>
 
   {#if !collapsed}
-    <div class="rows" role="list">
+    <div
+      class="rows"
+      role="list"
+      data-status={status.id}
+      use:sortable={{
+        group: `tasks-${store.id}`,
+        handle: '.grip',
+        onmove: (taskId, to, index) => {
+          const task = store.tasks.find((t) => t.id === taskId);
+          if (task) store.moveTask(task, to, index);
+        },
+      }}
+    >
       {#each tasks as task (task.id)}
         <TaskRow
           {task}
           {status}
           {statuses}
-          onupdate={(patch) => onupdatetask(task, patch)}
-          ondelete={() => ondeletetask(task)}
+          onupdate={(patch) => store.updateTask(task, patch)}
+          ondelete={() => store.deleteTask(task)}
         />
       {/each}
-      <form class="add" onsubmit={add}>
+    </div>
+    <form class="add" onsubmit={add}>
         <span class="plus" aria-hidden="true">＋</span>
         <input
           bind:value={draft}
@@ -169,7 +170,6 @@
           onkeydown={(e) => e.key === 'Escape' && ((draft = ''), e.currentTarget.blur())}
         />
       </form>
-    </div>
   {/if}
 </section>
 
@@ -214,6 +214,8 @@
   .rows {
     display: flex;
     flex-direction: column;
+    /* An empty section still accepts drops. */
+    min-height: 6px;
   }
 
   .add {

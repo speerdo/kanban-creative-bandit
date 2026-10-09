@@ -5,6 +5,7 @@ use axum::{
     routing::{get, patch},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::SqliteConnection;
 
 use super::{List, Placement, projects};
@@ -75,7 +76,7 @@ struct CreateBody {
 
 async fn create(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(project_id): Path<i64>,
     Json(body): Json<CreateBody>,
 ) -> AppResult<(StatusCode, Json<Status>)> {
@@ -103,6 +104,7 @@ async fn create(
     .await?;
     let status = fetch(&mut tx, id).await?;
     tx.commit().await?;
+    state.events.send("status.created", me.id, &status);
     Ok((StatusCode::CREATED, Json(status)))
 }
 
@@ -117,12 +119,13 @@ struct UpdateBody {
 
 async fn update(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
     Json(body): Json<UpdateBody>,
 ) -> AppResult<Json<Status>> {
     let mut tx = state.db.begin_with("BEGIN IMMEDIATE").await?;
     let mut s = fetch(&mut tx, id).await?;
+    let mut tasks_changed = false;
 
     if let Some(name) = body.name {
         s.name = validate::name("name", &name, 40)?;
@@ -144,6 +147,7 @@ async fn update(
             .execute(&mut *tx)
             .await?;
             s.category = category;
+            tasks_changed = true;
         }
     }
     if body.placement.is_set() {
@@ -161,6 +165,14 @@ async fn update(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    state.events.send("status.updated", me.id, &s);
+    if tasks_changed {
+        state.events.send(
+            "project.tasks_changed",
+            me.id,
+            json!({ "project_id": s.project_id }),
+        );
+    }
     Ok(Json(s))
 }
 
@@ -172,7 +184,7 @@ struct RemoveQuery {
 
 async fn remove(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
     Query(q): Query<RemoveQuery>,
 ) -> AppResult<StatusCode> {
@@ -243,5 +255,17 @@ async fn remove(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    state.events.send(
+        "status.deleted",
+        me.id,
+        json!({ "id": id, "project_id": s.project_id }),
+    );
+    if tasks > 0 {
+        state.events.send(
+            "project.tasks_changed",
+            me.id,
+            json!({ "project_id": s.project_id }),
+        );
+    }
     Ok(StatusCode::NO_CONTENT)
 }

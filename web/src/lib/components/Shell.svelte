@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { connect, disconnect } from '../live.svelte';
+  import { active } from '../project.svelte';
   import { failed, go, loadWorkspace, router, workspace } from '../state.svelte';
   import ProjectView from './ProjectView.svelte';
   import QuickAdd from './QuickAdd.svelte';
@@ -7,8 +9,11 @@
   let loaded = $state(false);
   let navOpen = $state(false);
   let quickAdd = $state(false);
-  /** Bumped when quick add creates a task, so the open project reloads. */
-  let refresh = $state(0);
+
+  $effect(() => {
+    connect();
+    return disconnect;
+  });
 
   loadWorkspace()
     .catch(failed)
@@ -37,7 +42,8 @@
     }
   }
 
-  const currentProjectId = $derived(router.route.name === 'project' ? router.route.id : undefined);
+  const current = $derived(router.route.name === 'project' ? router.route : undefined);
+  const currentProjectId = $derived(current?.id);
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -50,9 +56,9 @@
     <button class="icon-btn menu" aria-label="Open menu" onclick={() => (navOpen = true)}>☰</button>
     {#if !loaded}
       <p class="muted pad">Loading…</p>
-    {:else if currentProjectId !== undefined}
-      {#key `${currentProjectId}:${refresh}`}
-        <ProjectView projectId={currentProjectId} />
+    {:else if current}
+      {#key current.id}
+        <ProjectView projectId={current.id} view={current.view} />
       {/key}
     {:else}
       <div class="empty">
@@ -68,7 +74,8 @@
     projectId={currentProjectId}
     onclose={() => (quickAdd = false)}
     oncreated={(task) => {
-      if (task.project_id === currentProjectId) refresh++;
+      // Shown right away; the live echo of the same task is a no-op.
+      if (task.project_id === currentProjectId) active.store?.apply('task.created', task);
       else go({ name: 'project', id: task.project_id });
     }}
   />

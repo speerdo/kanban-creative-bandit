@@ -7,11 +7,12 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::{AppState, auth, routes};
+use crate::{AppState, auth, events, routes};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .route("/events", get(events::stream))
         .merge(auth::router())
         .merge(routes::router())
         .fallback(not_found)

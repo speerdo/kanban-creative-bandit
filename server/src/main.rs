@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod db;
 mod error;
+mod events;
 mod position;
 mod routes;
 mod validate;
@@ -22,6 +23,7 @@ use tracing_subscriber::EnvFilter;
 #[derive(Clone)]
 pub struct AppState {
     pub db: SqlitePool,
+    pub events: events::Hub,
 }
 
 pub fn app(state: AppState) -> Router {
@@ -53,11 +55,22 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(purge_sessions_daily(db.clone()));
 
+    let (events, stop_events) = events::Hub::new();
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!("listening on http://{}", config.bind);
-    axum::serve(listener, app(AppState { db: db.clone() }))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app(AppState {
+            db: db.clone(),
+            events,
+        }),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // End the open SSE streams, or shutdown would wait on every browser tab.
+        let _ = stop_events.send(true);
+    })
+    .await?;
 
     db.close().await;
     tracing::info!("shut down cleanly");

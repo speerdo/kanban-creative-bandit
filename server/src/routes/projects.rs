@@ -5,6 +5,7 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::SqliteConnection;
 
 use super::{List, Placement};
@@ -137,6 +138,7 @@ async fn create(
 
     let project = fetch(&mut tx, id).await?;
     tx.commit().await?;
+    state.events.send("project.created", me.id, &project);
     Ok((StatusCode::CREATED, Json(project)))
 }
 
@@ -152,7 +154,7 @@ struct UpdateBody {
 
 async fn update(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
     Json(body): Json<UpdateBody>,
 ) -> AppResult<Json<Project>> {
@@ -200,6 +202,7 @@ async fn update(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    state.events.send("project.updated", me.id, &p);
     Ok(Json(p))
 }
 
@@ -207,7 +210,7 @@ async fn update(
 /// archiving instead.
 async fn remove(
     State(state): State<AppState>,
-    _: CurrentUser,
+    CurrentUser(me): CurrentUser,
     Path(id): Path<i64>,
 ) -> AppResult<StatusCode> {
     let mut tx = state.db.begin_with("BEGIN IMMEDIATE").await?;
@@ -224,5 +227,8 @@ async fn remove(
         return Err(AppError::NotFound);
     }
     tx.commit().await?;
+    state
+        .events
+        .send("project.deleted", me.id, json!({ "id": id }));
     Ok(StatusCode::NO_CONTENT)
 }

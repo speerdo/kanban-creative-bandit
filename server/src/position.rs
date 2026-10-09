@@ -136,3 +136,18 @@ mod tests {
         assert!(last.unwrap().len() <= 40);
     }
 }
+
+#[cfg(test)]
+mod parity {
+    use super::between;
+
+    /// The same cases as web/src/lib/position.test.ts, so client and server agree.
+    #[test]
+    fn matches_the_client() {
+        assert_eq!(between(None, None), "V");
+        assert_eq!(between(Some("V"), None), "l");
+        assert_eq!(between(None, Some("V")), "G");
+        assert_eq!(between(Some("V"), Some("W")), "VV");
+        assert_eq!(between(Some("V"), Some("V1")), "V0V");
+    }
+}
