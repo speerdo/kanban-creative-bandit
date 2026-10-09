@@ -6,7 +6,9 @@ and per-user custom colors, plus a calendar that syncs with Google Calendar and
 Gmail/Drive/Keep hooks. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
-> **Status:** M0 (scaffold): server + frontend skeleton with a health check. See the [roadmap](docs/blueprint.md#8-roadmap).
+> **Status:** M1 (core tasks): sign-in, projects, per-project statuses, list view, status pills, quick add.
+> Next up: M2 (board view + live sync). Google Calendar/Gmail/Drive/Keep are planned for M6–M7.
+> See the [roadmap](docs/blueprint.md#8-roadmap).
 
 ## Quick start
 
@@ -19,6 +21,13 @@ make dev-server   # Rust API on :8080, creates data/kanban.db
 make dev-web      # Vite on http://localhost:5173 with hot reload, proxies /api to :8080
 ```
 
+Create accounts (there's no sign-up page). In dev this uses `data/kanban.db`:
+
+```bash
+cargo run -- user add adam "Adam"     # prompts for a password
+cargo run -- user add kat "Kat"
+```
+
 **Deploy on the home server:**
 
 ```bash
@@ -28,6 +37,12 @@ make install      # builds frontend + release binary, then runs sudo deploy/inst
 The installer creates the `kanban` system user, installs the systemd unit (resource-capped so the
 trading bot always wins) and opens port 8080 to the LAN only if `ufw` is active. Then open
 `http://192.168.4.32:8080` from any device on the home network.
+
+Then create the accounts against the live database:
+
+```bash
+sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db /usr/local/bin/kanban user add adam "Adam"
+```
 
 Upgrade: `git pull && make install`. Logs: `journalctl -u kanban -f`.
 
