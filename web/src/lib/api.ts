@@ -13,6 +13,20 @@ export type User = {
   avatar_color: string;
 };
 
+export type Prefs = {
+  theme: 'system' | 'light' | 'dark';
+  /** Palette name or #rrggbb. */
+  accent_color: string;
+  /** Palette name, #rrggbb, or null for the theme's own canvas. */
+  background_color: string | null;
+  background_style: 'solid' | 'gradient' | 'subtle-pattern';
+  density: 'comfortable' | 'compact';
+  default_view: 'list' | 'board';
+};
+
+/** The signed-in user, with their prefs. */
+export type Me = User & { prefs: Prefs };
+
 export type Project = {
   id: number;
   name: string;
@@ -124,9 +138,11 @@ export const api = {
   },
 
   login: (username: string, password: string) =>
-    request<User>('POST', '/auth/login', { username, password }),
+    request<Me>('POST', '/auth/login', { username, password }),
   logout: () => request<void>('POST', '/auth/logout'),
-  me: () => get<User>('/me'),
+  me: () => get<Me>('/me'),
+  updatePrefs: (p: Partial<Prefs>) => request<Prefs>('PUT', '/me/prefs', p),
+  updateProfile: (p: { display_name?: string; avatar_color?: string }) => request<Me>('PATCH', '/me', p),
   users: () => get<User[]>('/users'),
 
   projects: (archived = false) => get<Project[]>(`/projects${qs({ archived: archived || undefined })}`),

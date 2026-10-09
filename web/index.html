@@ -9,6 +9,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin />
     <title>Kanban</title>
+    <script>
+      // Re-apply the last theme before anything paints (written by src/lib/theme.ts).
+      try {
+        const t = JSON.parse(localStorage.getItem('kanban.theme'));
+        if (t) {
+          for (const [k, v] of Object.entries(t.attrs)) document.documentElement.dataset[k] = v;
+          for (const [k, v] of Object.entries(t.vars)) document.documentElement.style.setProperty(k, v);
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

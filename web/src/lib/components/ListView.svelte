@@ -12,14 +12,20 @@
 </div>
 
 <style>
+  /* The list sits on a panel so a custom canvas never sits behind its text. */
   .list {
-    padding: 16px 24px 96px;
+    margin: 16px 24px 96px;
+    padding: 12px 16px 4px;
     max-width: 1100px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
 
   @media (max-width: 760px) {
     .list {
-      padding: 12px 8px 96px;
+      margin: 8px 6px 96px;
+      padding: 8px 8px 2px;
     }
   }
 </style>

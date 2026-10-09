@@ -1,8 +1,9 @@
 <script lang="ts">
   import { connect, disconnect } from '../live.svelte';
   import { active } from '../project.svelte';
-  import { failed, go, loadWorkspace, router, workspace } from '../state.svelte';
+  import { defaultView, failed, go, loadWorkspace, router, workspace } from '../state.svelte';
   import ProjectView from './ProjectView.svelte';
+  import Settings from './Settings.svelte';
   import QuickAdd from './QuickAdd.svelte';
   import Sidebar from './Sidebar.svelte';
 
@@ -56,9 +57,11 @@
     <button class="icon-btn menu" aria-label="Open menu" onclick={() => (navOpen = true)}>☰</button>
     {#if !loaded}
       <p class="muted pad">Loading…</p>
+    {:else if router.route.name === 'settings'}
+      <Settings />
     {:else if current}
       {#key current.id}
-        <ProjectView projectId={current.id} view={current.view} />
+        <ProjectView projectId={current.id} view={current.view ?? defaultView()} />
       {/key}
     {:else}
       <div class="empty">
@@ -100,11 +103,17 @@
 
   .pad {
     padding: 24px;
+    color: var(--on-canvas-muted);
   }
 
   .empty {
     padding: 64px 24px;
     text-align: center;
+    color: var(--on-canvas);
+  }
+
+  .empty .muted {
+    color: var(--on-canvas-muted);
   }
 
   @media (max-width: 760px) {
@@ -137,6 +146,7 @@
     /* Fixed above the sticky project header so it's always reachable. */
     .menu {
       display: inline-grid;
+      background: var(--surface);
       position: fixed;
       top: 12px;
       left: 12px;

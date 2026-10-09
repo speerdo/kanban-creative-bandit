@@ -89,7 +89,7 @@
 <style>
   .card {
     position: relative;
-    padding: 10px 8px 10px 12px;
+    padding: var(--card-pad) 8px var(--card-pad) 12px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);

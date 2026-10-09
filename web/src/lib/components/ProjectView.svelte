@@ -86,7 +86,7 @@
         value={project.color}
         onpick={(c) => {
           colorOpen = false;
-          updateProject({ color: c });
+          if (c) updateProject({ color: c });
         }}
       />
     </Popover>
@@ -155,7 +155,8 @@
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    background: var(--bg);
+    background: color-mix(in oklch, var(--surface) 88%, transparent);
+    backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     box-shadow: inset 0 3px 0 var(--project);
   }
@@ -234,6 +235,7 @@
 
   .loading {
     padding: 16px 24px;
+    color: var(--on-canvas-muted);
   }
 
   @media (max-width: 760px) {

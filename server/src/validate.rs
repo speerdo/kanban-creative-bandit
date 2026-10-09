@@ -50,8 +50,20 @@ pub fn one_of(field: &str, value: &str, allowed: &[&str]) -> AppResult<String> {
     }
 }
 
+/// A palette name, or any `#rrggbb` (the "Custom…" option). Hex is stored lowercase.
 pub fn color(value: &str) -> AppResult<String> {
-    one_of("color", value, COLORS)
+    let v = value.trim();
+    let hex = v.len() == 7 && v.starts_with('#') && v[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if hex {
+        Ok(v.to_ascii_lowercase())
+    } else if COLORS.contains(&v) {
+        Ok(v.to_string())
+    } else {
+        Err(AppError::bad(format!(
+            "color must be #rrggbb or one of: {}",
+            COLORS.join(", ")
+        )))
+    }
 }
 
 /// `YYYY-MM-DD` with a plausible month and day.

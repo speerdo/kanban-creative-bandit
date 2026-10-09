@@ -15,7 +15,7 @@ use axum::{
     Json, Router,
     extract::{FromRequestParts, State},
     http::{HeaderMap, header, request::Parts},
-    routing::{get, post},
+    routing::post,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
@@ -82,7 +82,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
-        .route("/me", get(me))
 }
 
 #[derive(Deserialize)]
@@ -96,7 +95,7 @@ async fn login(
     headers: HeaderMap,
     jar: CookieJar,
     Json(body): Json<LoginBody>,
-) -> AppResult<(CookieJar, Json<User>)> {
+) -> AppResult<(CookieJar, Json<crate::prefs::Me>)> {
     let row: Option<(i64, String)> =
         sqlx::query_as("SELECT id, password_hash FROM users WHERE username = ?")
             .bind(body.username.trim())
@@ -130,7 +129,7 @@ async fn login(
     .execute(&state.db)
     .await?;
 
-    let user = get_user(&state.db, user_id).await?;
+    let me = crate::prefs::me_for(&state.db, get_user(&state.db, user_id).await?).await?;
     let cookie = Cookie::build((COOKIE, token))
         .http_only(true)
         .same_site(SameSite::Strict)
@@ -138,7 +137,7 @@ async fn login(
         // The server-side expiry is authoritative; keep the cookie around as long as browsers allow.
         .max_age(time_days(400))
         .build();
-    Ok((jar.add(cookie), Json(user)))
+    Ok((jar.add(cookie), Json(me)))
 }
 
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> AppResult<CookieJar> {
@@ -149,10 +148,6 @@ async fn logout(State(state): State<AppState>, jar: CookieJar) -> AppResult<Cook
             .await?;
     }
     Ok(jar.remove(Cookie::build(COOKIE).path("/")))
-}
-
-async fn me(CurrentUser(user): CurrentUser) -> Json<User> {
-    Json(user)
 }
 
 pub async fn get_user(db: &SqlitePool, id: i64) -> AppResult<User> {

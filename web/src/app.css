@@ -35,62 +35,48 @@
   src: url('/fonts/space-mono-700.woff2') format('woff2');
 }
 
-/* Named palette (server/src/validate.rs COLORS). `--c-x` is the solid hue for dots, bars and
-   stripes; `--c-x-text` is the same hue at a lightness that reads on tinted surfaces. */
+/* Themes: every token is written once as light-dark(light, dark). The page follows the OS
+   unless the user picks a theme, which sets data-theme on <html> (see lib/theme.ts). */
 :root {
-  --c-slate: oklch(0.64 0.005 255);
-  --c-slate-text: oklch(0.44 0.004 255);
-  --c-red: oklch(0.64 0.170 25);
-  --c-red-text: oklch(0.44 0.130 25);
-  --c-orange: #e8451f; /* brand */
-  --c-orange-text: oklch(0.44 0.130 50);
-  --c-amber: oklch(0.76 0.170 75);
-  --c-amber-text: oklch(0.44 0.130 75);
-  --c-yellow: #ffe800; /* brand */
-  --c-yellow-text: oklch(0.44 0.130 95);
-  --c-lime: oklch(0.76 0.170 128);
-  --c-lime-text: oklch(0.44 0.130 128);
-  --c-green: oklch(0.64 0.170 150);
-  --c-green-text: oklch(0.44 0.130 150);
-  --c-teal: oklch(0.64 0.170 180);
-  --c-teal-text: oklch(0.44 0.130 180);
-  --c-cyan: oklch(0.64 0.170 215);
-  --c-cyan-text: oklch(0.44 0.130 215);
-  --c-blue: #1b27e8; /* brand */
-  --c-blue-text: oklch(0.44 0.130 255);
-  --c-violet: oklch(0.64 0.170 290);
-  --c-violet-text: oklch(0.44 0.130 290);
-  --c-pink: #e5195a; /* brand */
-  --c-pink-text: oklch(0.44 0.130 345);
+  color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --c-slate: oklch(0.70 0.004 255);
-    --c-slate-text: oklch(0.86 0.003 255);
-    --c-red: oklch(0.70 0.150 25);
-    --c-red-text: oklch(0.86 0.100 25);
-    --c-orange: oklch(0.70 0.150 50);
-    --c-orange-text: oklch(0.86 0.100 50);
-    --c-amber: oklch(0.76 0.150 75);
-    --c-amber-text: oklch(0.86 0.100 75);
-    --c-yellow: oklch(0.76 0.150 95);
-    --c-yellow-text: oklch(0.86 0.100 95);
-    --c-lime: oklch(0.76 0.150 128);
-    --c-lime-text: oklch(0.86 0.100 128);
-    --c-green: oklch(0.70 0.150 150);
-    --c-green-text: oklch(0.86 0.100 150);
-    --c-teal: oklch(0.70 0.150 180);
-    --c-teal-text: oklch(0.86 0.100 180);
-    --c-cyan: oklch(0.70 0.150 215);
-    --c-cyan-text: oklch(0.86 0.100 215);
-    --c-blue: #6e79ff; /* brand ink-cold-lift */
-    --c-blue-text: oklch(0.86 0.100 255);
-    --c-violet: oklch(0.70 0.150 290);
-    --c-violet-text: oklch(0.86 0.100 290);
-    --c-pink: oklch(0.70 0.150 345);
-    --c-pink-text: oklch(0.86 0.100 345);
-  }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* Named palette (server/src/validate.rs COLORS); brand inks for orange, blue, yellow, pink.
+   `--c-x` is the solid hue for dots, bars and stripes; `--c-x-text` is the same hue at a
+   lightness that reads on tinted surfaces. Text *on* a solid hue is computed in lib/theme.ts. */
+:root {
+  --c-slate: light-dark(oklch(0.64 0.005 255), oklch(0.70 0.004 255));
+  --c-slate-text: light-dark(oklch(0.44 0.004 255), oklch(0.86 0.003 255));
+  --c-red: light-dark(oklch(0.64 0.170 25), oklch(0.70 0.150 25));
+  --c-red-text: light-dark(oklch(0.44 0.130 25), oklch(0.86 0.100 25));
+  --c-orange: light-dark(#e8451f, #e8451f);
+  --c-orange-text: light-dark(oklch(0.44 0.130 50), oklch(0.86 0.100 50));
+  --c-amber: light-dark(oklch(0.76 0.170 75), oklch(0.76 0.150 75));
+  --c-amber-text: light-dark(oklch(0.44 0.130 75), oklch(0.86 0.100 75));
+  --c-yellow: light-dark(#ffe800, #ffe800);
+  --c-yellow-text: light-dark(oklch(0.44 0.130 95), oklch(0.86 0.100 95));
+  --c-lime: light-dark(oklch(0.76 0.170 128), oklch(0.76 0.150 128));
+  --c-lime-text: light-dark(oklch(0.44 0.130 128), oklch(0.86 0.100 128));
+  --c-green: light-dark(oklch(0.64 0.170 150), oklch(0.70 0.150 150));
+  --c-green-text: light-dark(oklch(0.44 0.130 150), oklch(0.86 0.100 150));
+  --c-teal: light-dark(oklch(0.64 0.170 180), oklch(0.70 0.150 180));
+  --c-teal-text: light-dark(oklch(0.44 0.130 180), oklch(0.86 0.100 180));
+  --c-cyan: light-dark(oklch(0.64 0.170 215), oklch(0.70 0.150 215));
+  --c-cyan-text: light-dark(oklch(0.44 0.130 215), oklch(0.86 0.100 215));
+  --c-blue: light-dark(#1b27e8, #6e79ff);
+  --c-blue-text: light-dark(oklch(0.44 0.130 255), oklch(0.86 0.100 255));
+  --c-violet: light-dark(oklch(0.64 0.170 290), oklch(0.70 0.150 290));
+  --c-violet-text: light-dark(oklch(0.44 0.130 290), oklch(0.86 0.100 290));
+  --c-pink: light-dark(#e5195a, #e5195a);
+  --c-pink-text: light-dark(oklch(0.44 0.130 345), oklch(0.86 0.100 345));
 }
 
 :root {
@@ -101,42 +87,45 @@
   --brand-cold: #1b27e8;
   --brand-acid: #ffe800;
 
-  --bg: var(--brand-paper);
-  --surface: #fbf9f5;
-  --surface-2: #f3efe7;
-  --hover: #f4f0e9;
-  --text: var(--brand-base);
-  --text-muted: #5c574f;
-  --border: #ddd6ca;
-  --accent: var(--brand-cold);
-  --accent-text: #ffffff;
-  --ok: #1f8a4c;
-  --bad: #c9361a;
-  --shadow: 0 8px 28px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+  --bg: light-dark(var(--brand-paper), var(--brand-base));
+  --surface: light-dark(#fbf9f5, #111113);
+  --surface-2: light-dark(#f3efe7, #17171a);
+  --hover: light-dark(#f4f0e9, #1c1c20);
+  --text: light-dark(var(--brand-base), var(--brand-paper));
+  --text-muted: light-dark(#5c574f, #b5aea3);
+  --border: light-dark(#ddd6ca, #26262b);
+  --accent: light-dark(var(--brand-cold), #6e79ff);
+  --accent-text: light-dark(#ffffff, var(--brand-base));
+  --ok: light-dark(#1f8a4c, #4fc07e);
+  --bad: light-dark(#c9361a, #ff6a47);
+  /* light-dark() only takes colors, so the shadow's colors are tokens of their own. */
+  --shadow-1: light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.5));
+  --shadow-2: light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+  --shadow: 0 8px 28px var(--shadow-1), 0 1px 3px var(--shadow-2);
+
+  /* The canvas behind the panels. A user background replaces it (and only it), with text
+     colors for anything drawn directly on it computed to stay readable. */
+  --canvas: var(--bg);
+  --canvas-image: none;
+  --canvas-size: auto;
+  --on-canvas: var(--text);
+  --on-canvas-muted: var(--text-muted);
+
+  /* Density (data-density on <html>). */
+  --row-h: 40px;
+  --card-pad: 10px;
+
   --radius: 10px;
   --radius-sm: 6px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-heading: 'Archivo', system-ui, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
   --sidebar: 248px;
-  color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: var(--brand-base);
-    --surface: #111113;
-    --surface-2: #17171a;
-    --hover: #1c1c20;
-    --text: var(--brand-paper);
-    --text-muted: #b5aea3;
-    --border: #26262b;
-    --accent: #6e79ff;
-    --accent-text: var(--brand-base);
-    --ok: #4fc07e;
-    --bad: #ff6a47;
-    --shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
-  }
+:root[data-density='compact'] {
+  --row-h: 32px;
+  --card-pad: 7px;
 }
 
 *,
@@ -149,7 +138,10 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--bg);
+  background-color: var(--canvas);
+  background-image: var(--canvas-image);
+  background-size: var(--canvas-size);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font);
   font-size: 14px;

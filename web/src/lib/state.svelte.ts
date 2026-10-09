@@ -1,8 +1,8 @@
 // App-wide state: who's signed in, the people and projects, toasts, and the current route.
 
-import { api, ApiError, type Project, type User } from './api';
+import { api, ApiError, type Me, type Project, type User } from './api';
 
-export const session = $state<{ me: User | null; checked: boolean }>({ me: null, checked: false });
+export const session = $state<{ me: Me | null; checked: boolean }>({ me: null, checked: false });
 export const people = $state<{ users: User[] }>({ users: [] });
 export const workspace = $state<{ projects: Project[] }>({ projects: [] });
 
@@ -41,41 +41,27 @@ export function failed(e: unknown): false {
   return false;
 }
 
-// ---- routing (hash based: #/p/3 or #/p/3/board) -------------------------------------------
+// ---- routing (hash based: #/p/3, #/p/3/board, #/settings) ---------------------------------
 
 export type View = 'list' | 'board';
-export type Route = { name: 'home' } | { name: 'project'; id: number; view: View };
-
-const VIEW_KEY = 'kanban.view';
-
-/** The last view used, so opening a project from the sidebar keeps it (server prefs in M3). */
-export function lastView(): View {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list';
-  } catch {
-    return 'list';
-  }
-}
+/** A project route without a view opens in the user's default view. */
+export type Route = { name: 'home' } | { name: 'settings' } | { name: 'project'; id: number; view?: View };
 
 function parse(hash: string): Route {
+  if (hash.startsWith('#/settings')) return { name: 'settings' };
   const m = /^#\/p\/(\d+)(?:\/(list|board))?/.exec(hash);
   if (!m) return { name: 'home' };
-  return { name: 'project', id: Number(m[1]), view: (m[2] as View | undefined) ?? lastView() };
+  return { name: 'project', id: Number(m[1]), view: m[2] as View | undefined };
 }
 
 export const router = $state<{ route: Route }>({ route: parse(location.hash) });
 window.addEventListener('hashchange', () => (router.route = parse(location.hash)));
 
-export function go(route: { name: 'home' } | { name: 'project'; id: number; view?: View }) {
-  if (route.name === 'home') {
-    location.hash = '#/';
-    return;
-  }
-  const view = route.view ?? lastView();
-  try {
-    localStorage.setItem(VIEW_KEY, view);
-  } catch {
-    /* not remembered; fine */
-  }
-  location.hash = `#/p/${route.id}/${view}`;
+export function defaultView(): View {
+  return session.me?.prefs.default_view ?? 'list';
+}
+
+export function go(route: Route) {
+  if (route.name === 'project') location.hash = route.view ? `#/p/${route.id}/${route.view}` : `#/p/${route.id}`;
+  else location.hash = route.name === 'settings' ? '#/settings' : '#/';
 }

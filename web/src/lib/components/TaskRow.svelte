@@ -156,7 +156,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 40px;
+    min-height: var(--row-h);
     padding: 2px 4px 2px 0;
     border-bottom: 1px solid var(--border);
     box-shadow: inset 3px 0 0 var(--stripe);

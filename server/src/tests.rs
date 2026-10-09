@@ -475,3 +475,89 @@ async fn event_stream_requires_sign_in_and_says_hello() {
     let (status, _) = c.call(Method::GET, "/api/events", None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn prefs_default_merge_and_validate() {
+    let mut c = Client::new().await;
+    let me = c.ok(Method::GET, "/api/me", None).await;
+    assert_eq!(me["username"], "adam");
+    assert_eq!(me["prefs"]["theme"], "system");
+    assert!(me["prefs"]["background_color"].is_null());
+
+    let mut rx = c.events.subscribe();
+    let p = c
+        .ok(
+            Method::PUT,
+            "/api/me/prefs",
+            Some(json!({"theme": "dark", "accent_color": "#E8451F", "background_color": "teal"})),
+        )
+        .await;
+    assert_eq!(p["theme"], "dark");
+    assert_eq!(p["accent_color"], "#e8451f", "hex is normalised");
+    assert_eq!(
+        p["density"], "comfortable",
+        "untouched fields keep their value"
+    );
+    assert_eq!(rx.try_recv().unwrap().kind, "prefs.updated");
+
+    // Only the fields sent change; null clears the background.
+    let p = c
+        .ok(
+            Method::PUT,
+            "/api/me/prefs",
+            Some(json!({"background_color": null, "density": "compact"})),
+        )
+        .await;
+    assert!(p["background_color"].is_null());
+    assert_eq!(p["theme"], "dark");
+    assert_eq!(p["density"], "compact");
+
+    for bad in [
+        json!({"theme": "neon"}),
+        json!({"accent_color": "#12345"}),
+        json!({"accent_color": "chartreuse"}),
+    ] {
+        let (status, _) = c.call(Method::PUT, "/api/me/prefs", Some(bad)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    // Login hands back the prefs too, so the UI can theme itself straight away.
+    let (_, login) = c
+        .call(
+            Method::POST,
+            "/api/auth/login",
+            Some(json!({"username": "adam", "password": "password1"})),
+        )
+        .await;
+    assert_eq!(login["prefs"]["theme"], "dark");
+}
+
+#[tokio::test]
+async fn profile_update_is_broadcast() {
+    let mut c = Client::new().await;
+    let mut rx = c.events.subscribe();
+    let me = c
+        .ok(
+            Method::PATCH,
+            "/api/me",
+            Some(json!({"display_name": " Adam S ", "avatar_color": "#1b27e8"})),
+        )
+        .await;
+    assert_eq!(me["display_name"], "Adam S");
+    assert_eq!(me["avatar_color"], "#1b27e8");
+    let e = rx.try_recv().unwrap();
+    assert_eq!(
+        (e.kind, e.data["display_name"].as_str()),
+        ("user.updated", Some("Adam S"))
+    );
+
+    // Custom hex colors work for projects too.
+    let p = c
+        .ok(
+            Method::POST,
+            "/api/projects",
+            Some(json!({"name": "Custom", "color": "#FFE800"})),
+        )
+        .await;
+    assert_eq!(p["color"], "#ffe800");
+}

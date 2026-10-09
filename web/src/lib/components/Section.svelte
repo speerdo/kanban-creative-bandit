@@ -110,7 +110,7 @@
       {/snippet}
       {#if menuPage === 'main'}
         <button class="item" onclick={() => ((menuOpen = false), (renaming = true))}>Rename</button>
-        <ColorSwatches value={status.color} onpick={(c) => onupdatestatus({ color: c })} />
+        <ColorSwatches value={status.color} onpick={(c) => c && onupdatestatus({ color: c })} />
         <hr />
         {#each CATEGORIES as [value, label] (value)}
           <button class="item" role="menuitemradio" aria-checked={status.category === value} onclick={() => onupdatestatus({ category: value })}>

@@ -2,9 +2,9 @@
 // The browser reconnects by itself after a dropped connection or a server restart; since
 // events may have been missed meanwhile, every reconnect (and any `resync`) refetches.
 
-import type { Project } from './api';
+import type { Prefs, Project, User } from './api';
 import { active } from './project.svelte';
-import { loadWorkspace, workspace } from './state.svelte';
+import { loadWorkspace, people, session, workspace } from './state.svelte';
 
 export const live = $state<{ connected: boolean }>({ connected: false });
 
@@ -42,6 +42,18 @@ export function connect() {
       active.store?.apply(kind, data);
     });
   }
+
+  // My prefs changed on another device (or this one: the echo is harmless).
+  source.addEventListener('prefs.updated', (e) => {
+    const { by, data } = JSON.parse((e as MessageEvent).data) as { by: number; data: Prefs };
+    if (session.me && by === session.me.id) Object.assign(session.me.prefs, data);
+  });
+  source.addEventListener('user.updated', (e) => {
+    const user: User = JSON.parse((e as MessageEvent).data).data;
+    const known = people.users.find((u) => u.id === user.id);
+    if (known) Object.assign(known, user);
+    if (session.me?.id === user.id) Object.assign(session.me, user);
+  });
 
   source.addEventListener('project.created', (e) => {
     const p: Project = JSON.parse((e as MessageEvent).data).data;

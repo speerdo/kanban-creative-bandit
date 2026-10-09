@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod events;
 mod position;
+mod prefs;
 mod routes;
 mod validate;
 

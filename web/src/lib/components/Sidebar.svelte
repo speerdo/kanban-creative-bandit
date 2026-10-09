@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../api';
   import { solid } from '../colors';
-  import { failed, go, lastView, router, session, workspace } from '../state.svelte';
+  import { defaultView, failed, go, router, session, workspace } from '../state.svelte';
   import Avatar from './Avatar.svelte';
 
   let { onquickadd }: { onquickadd: () => void } = $props();
@@ -32,7 +32,7 @@
 
   const current = $derived(router.route.name === 'project' ? router.route.id : null);
   // Switching projects keeps the current view.
-  const view = $derived(router.route.name === 'project' ? router.route.view : lastView());
+  const view = $derived((router.route.name === 'project' && router.route.view) || defaultView());
 </script>
 
 <nav>
@@ -73,6 +73,13 @@
   <div class="me">
     <Avatar user={session.me ?? undefined} size={26} />
     <span class="name">{session.me?.display_name}</span>
+    <a
+      class="icon-btn settings"
+      href="#/settings"
+      title="Settings"
+      aria-label="Settings"
+      aria-current={router.route.name === 'settings' ? 'page' : undefined}>⚙</a
+    >
     <button class="icon-btn" title="Sign out" aria-label="Sign out" onclick={logout}>⎋</button>
   </div>
 </nav>
@@ -182,5 +189,17 @@
 
   .me .name {
     flex: 1;
+  }
+
+  .me .settings {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    font-size: 1rem;
+  }
+
+  .me .settings[aria-current='page'] {
+    background: var(--surface-2);
+    color: var(--text);
   }
 </style>

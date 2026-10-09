@@ -127,7 +127,7 @@
   .cards {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: calc(var(--card-pad) - 2px);
     padding: 4px 8px;
     overflow-y: auto;
     /* Empty columns still accept drops. */

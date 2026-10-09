@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { User } from '../api';
   import { solid } from '../colors';
+  import { onColor } from '../theme';
 
   let { user, size = 22 }: { user: User | undefined; size?: number } = $props();
 </script>
@@ -12,6 +13,7 @@
     style:height="{size}px"
     style:font-size="{size * 0.45}px"
     style:background={solid(user.avatar_color)}
+    style:color={onColor(user.avatar_color)}
     title={user.display_name}>{user.display_name.slice(0, 1).toUpperCase()}</span
   >
 {:else}
@@ -24,7 +26,6 @@
     place-items: center;
     flex: none;
     border-radius: 50%;
-    color: #fff;
     font-weight: 600;
   }
 
