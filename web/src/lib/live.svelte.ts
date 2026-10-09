@@ -2,13 +2,27 @@
 // The browser reconnects by itself after a dropped connection or a server restart; since
 // events may have been missed meanwhile, every reconnect (and any `resync`) refetches.
 
-import type { Prefs, Project, User } from './api';
-import { active } from './project.svelte';
+import type { Label, Prefs, Project, User } from './api';
 import { loadWorkspace, people, session, workspace } from './state.svelte';
 
 export const live = $state<{ connected: boolean }>({ connected: false });
 
 let source: EventSource | null = null;
+
+/** A view that shows tasks (a project, My Tasks, the detail panel). */
+export type Listener = {
+  /** A task/status/comment event; ignore what isn't yours. */
+  event: (kind: string, data: Record<string, unknown>) => void;
+  /** Events may have been missed: refetch. */
+  resync: () => void;
+};
+const listeners = new Set<Listener>();
+
+/** Subscribes a view; returns the unsubscribe function (handy as an $effect cleanup). */
+export function listen(l: Listener): () => void {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
 
 const KINDS = [
   'task.created',
@@ -19,6 +33,9 @@ const KINDS = [
   'status.updated',
   'status.deleted',
   'project.tasks_changed',
+  'comment.created',
+  'comment.updated',
+  'comment.deleted',
 ];
 
 export function connect() {
@@ -39,7 +56,7 @@ export function connect() {
   for (const kind of KINDS) {
     source.addEventListener(kind, (e) => {
       const { data } = JSON.parse((e as MessageEvent).data);
-      active.store?.apply(kind, data);
+      for (const l of listeners) l.event(kind, data);
     });
   }
 
@@ -53,6 +70,24 @@ export function connect() {
     const known = people.users.find((u) => u.id === user.id);
     if (known) Object.assign(known, user);
     if (session.me?.id === user.id) Object.assign(session.me, user);
+  });
+
+  const labelSort = () => workspace.labels.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  source.addEventListener('label.created', (e) => {
+    const l: Label = JSON.parse((e as MessageEvent).data).data;
+    if (!workspace.labels.some((x) => x.id === l.id)) workspace.labels.push(l);
+    labelSort();
+  });
+  source.addEventListener('label.updated', (e) => {
+    const l: Label = JSON.parse((e as MessageEvent).data).data;
+    const known = workspace.labels.find((x) => x.id === l.id);
+    if (known) Object.assign(known, l);
+    labelSort();
+  });
+  source.addEventListener('label.deleted', (e) => {
+    const { id } = JSON.parse((e as MessageEvent).data).data;
+    workspace.labels = workspace.labels.filter((l) => l.id !== id);
+    for (const l of listeners) l.resync(); // tasks lose the label
   });
 
   source.addEventListener('project.created', (e) => {
@@ -86,5 +121,5 @@ export function disconnect() {
 
 function resync() {
   loadWorkspace().catch(() => {});
-  active.store?.load();
+  for (const l of listeners) l.resync();
 }

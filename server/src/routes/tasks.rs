@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
 
-use super::{List, Placement, projects, statuses};
+use super::{List, Placement, activity, projects, statuses};
 use crate::{
     AppState,
     auth::CurrentUser,
@@ -35,6 +35,14 @@ pub struct Task {
     pub updated_at: String,
     pub subtask_count: i64,
     pub subtasks_done: i64,
+    /// A JSON array from SQLite, sent as a real array.
+    #[serde(serialize_with = "id_list")]
+    pub label_ids: String,
+}
+
+fn id_list<S: serde::Serializer>(raw: &str, ser: S) -> Result<S::Ok, S::Error> {
+    let ids: Vec<i64> = serde_json::from_str(raw).unwrap_or_default();
+    ids.serialize(ser)
 }
 
 const SELECT: &str = "SELECT t.id, t.project_id, t.status_id, t.parent_task_id, t.title,
@@ -42,7 +50,9 @@ const SELECT: &str = "SELECT t.id, t.project_id, t.status_id, t.parent_task_id, 
         t.completed_at, t.created_by, t.created_at, t.updated_at,
         (SELECT COUNT(*) FROM tasks s WHERE s.parent_task_id = t.id) AS subtask_count,
         (SELECT COUNT(*) FROM tasks s WHERE s.parent_task_id = t.id
-            AND s.completed_at IS NOT NULL) AS subtasks_done
+            AND s.completed_at IS NOT NULL) AS subtasks_done,
+        (SELECT json_group_array(label_id) FROM
+            (SELECT label_id FROM task_labels WHERE task_id = t.id ORDER BY label_id)) AS label_ids
     FROM tasks t";
 
 const MAX_TITLE: usize = 300;
@@ -88,9 +98,14 @@ struct ListQuery {
     due_before: Option<String>,
     /// Subtasks of this task. Without it, only top-level tasks are listed.
     parent: Option<i64>,
+    /// Top-level tasks and subtasks alike (My Tasks).
+    #[serde(default)]
+    any_level: bool,
+    /// Tasks carrying this label.
+    label: Option<i64>,
     /// Include completed tasks (default true; My Tasks turns it off).
     completed: Option<bool>,
-    /// Case-insensitive title search.
+    /// Case-insensitive search in titles and descriptions.
     q: Option<String>,
 }
 
@@ -102,13 +117,21 @@ async fn list(
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT);
     qb.push(" JOIN projects p ON p.id = t.project_id WHERE p.archived = 0");
 
-    match f.parent {
-        Some(parent) => {
+    match (f.parent, f.any_level) {
+        (Some(parent), _) => {
             qb.push(" AND t.parent_task_id = ").push_bind(parent);
         }
-        None => {
+        (None, false) => {
             qb.push(" AND t.parent_task_id IS NULL");
         }
+        (None, true) => {}
+    }
+    if let Some(label) = f.label {
+        qb.push(
+            " AND EXISTS (SELECT 1 FROM task_labels tl WHERE tl.task_id = t.id AND tl.label_id = ",
+        )
+        .push_bind(label)
+        .push(")");
     }
     if let Some(project) = f.project {
         qb.push(" AND t.project_id = ").push_bind(project);
@@ -142,9 +165,12 @@ async fn list(
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        qb.push(" AND t.title LIKE ")
-            .push_bind(format!("%{escaped}%"))
-            .push(" ESCAPE '\\'");
+        let pattern = format!("%{escaped}%");
+        qb.push(" AND (t.title LIKE ")
+            .push_bind(pattern.clone())
+            .push(" ESCAPE '\\' OR t.description LIKE ")
+            .push_bind(pattern)
+            .push(" ESCAPE '\\')");
     }
     qb.push(" ORDER BY t.project_id, t.position, t.id LIMIT 2000");
 
@@ -174,6 +200,8 @@ struct CreateBody {
     priority: Option<String>,
     due_date: Option<String>,
     start_date: Option<String>,
+    #[serde(default)]
+    label_ids: Vec<i64>,
     #[serde(flatten)]
     placement: Placement,
 }
@@ -260,6 +288,8 @@ async fn create(
         .bind(me.id)
         .fetch_one(&mut *tx)
         .await?;
+    set_labels(&mut tx, id, &body.label_ids).await?;
+    activity::record(&mut tx, id, me.id, "created", None, None).await?;
 
     let task = fetch(&mut tx, id).await?;
     tx.commit().await?;
@@ -280,6 +310,8 @@ struct UpdateBody {
     due_date: Option<Option<String>>,
     #[serde(default, deserialize_with = "validate::nullable")]
     start_date: Option<Option<String>>,
+    /// Replaces the task's labels.
+    label_ids: Option<Vec<i64>>,
     /// Moves the task to the end of that status.
     status_id: Option<i64>,
     /// Shortcut for the checkbox: `true` moves to the project's done column, `false` back to
@@ -294,6 +326,7 @@ async fn update(
     Json(body): Json<UpdateBody>,
 ) -> AppResult<Json<Task>> {
     let mut tx = state.db.begin_with("BEGIN IMMEDIATE").await?;
+    let before = fetch(&mut tx, id).await?;
     let mut t = fetch(&mut tx, id).await?;
 
     if let Some(title) = body.title {
@@ -329,6 +362,53 @@ async fn update(
     .execute(&mut *tx)
     .await?;
 
+    // History, one entry per field that actually changed.
+    let log = |kind, from: Option<String>, to: Option<String>| (kind, from, to);
+    let mut changes = vec![];
+    if t.title != before.title {
+        changes.push(log(
+            "title",
+            Some(before.title.clone()),
+            Some(t.title.clone()),
+        ));
+    }
+    if t.description != before.description {
+        changes.push(log("description", None, None));
+    }
+    if t.assignee_id != before.assignee_id {
+        let from = activity::user_name(&mut tx, before.assignee_id).await?;
+        let to = activity::user_name(&mut tx, t.assignee_id).await?;
+        changes.push(log("assignee", from, to));
+    }
+    if t.priority != before.priority {
+        changes.push(log(
+            "priority",
+            Some(before.priority.clone()),
+            Some(t.priority.clone()),
+        ));
+    }
+    if t.due_date != before.due_date {
+        changes.push(log("due", before.due_date.clone(), t.due_date.clone()));
+    }
+    if t.start_date != before.start_date {
+        changes.push(log(
+            "start",
+            before.start_date.clone(),
+            t.start_date.clone(),
+        ));
+    }
+    if let Some(labels) = body.label_ids {
+        let from = activity::label_names(&mut tx, id).await?;
+        set_labels(&mut tx, id, &labels).await?;
+        let to = activity::label_names(&mut tx, id).await?;
+        if from != to {
+            changes.push(log("labels", Some(from), Some(to)));
+        }
+    }
+    for (kind, from, to) in changes {
+        activity::record(&mut tx, id, me.id, kind, from.as_deref(), to.as_deref()).await?;
+    }
+
     let target = match (body.status_id, body.completed) {
         (Some(s), _) => Some(s),
         (None, Some(true)) if t.completed_at.is_none() => {
@@ -340,7 +420,7 @@ async fn update(
         _ => None,
     };
     if let Some(status_id) = target.filter(|&s| s != t.status_id) {
-        place(&mut tx, &t, status_id, Placement::default()).await?;
+        place(&mut tx, &t, status_id, Placement::default(), me.id).await?;
     }
 
     let task = fetch(&mut tx, id).await?;
@@ -373,6 +453,7 @@ async fn move_task(
         &t,
         body.status_id.unwrap_or(t.status_id),
         body.placement,
+        me.id,
     )
     .await?;
     let task = fetch(&mut tx, id).await?;
@@ -381,12 +462,14 @@ async fn move_task(
     Ok(Json(task))
 }
 
-/// Puts `t` into `status_id` at `placement`, updating `completed_at` from the status category.
+/// Puts `t` into `status_id` at `placement`, updating `completed_at` from the status category
+/// and logging the change for `actor`.
 async fn place(
     conn: &mut SqliteConnection,
     t: &Task,
     status_id: i64,
     placement: Placement,
+    actor: i64,
 ) -> AppResult<()> {
     let status = statuses::fetch(conn, status_id)
         .await
@@ -410,8 +493,49 @@ async fn place(
         .bind(position)
         .bind(&status.category)
         .bind(t.id)
-        .execute(conn)
+        .execute(&mut *conn)
         .await?;
+
+    if status.id != t.status_id {
+        let from = statuses::fetch(conn, t.status_id)
+            .await
+            .ok()
+            .map(|s| s.name);
+        activity::record(
+            conn,
+            t.id,
+            actor,
+            "status",
+            from.as_deref(),
+            Some(&status.name),
+        )
+        .await?;
+        let done = status.category == "done";
+        if done != t.completed_at.is_some() {
+            let kind = if done { "completed" } else { "reopened" };
+            activity::record(conn, t.id, actor, kind, None, None).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Replaces a task's labels.
+async fn set_labels(conn: &mut SqliteConnection, task_id: i64, labels: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM task_labels WHERE task_id = ?")
+        .bind(task_id)
+        .execute(&mut *conn)
+        .await?;
+    for label in labels {
+        sqlx::query("INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)")
+            .bind(task_id)
+            .bind(label)
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| match AppError::from(e) {
+                AppError::BadRequest(_) => AppError::bad("that label doesn't exist"),
+                e => e,
+            })?;
+    }
     Ok(())
 }
 

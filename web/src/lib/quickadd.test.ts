@@ -12,7 +12,12 @@ const thursday = new Date(2026, 9, 8); // 2026-10-08
 
 test('pulls priority, assignee and date out of the title', () => {
   const p = parseQuickAdd('Fix login !high @kat #bug fri', users, thursday);
-  assert.deepEqual([p.title, p.priority, p.assignee?.id, p.due_date], ['Fix login #bug', 'high', 2, '2026-10-09']);
+  assert.deepEqual([p.title, p.priority, p.assignee?.id, p.due_date, p.labels], ['Fix login', 'high', 2, '2026-10-09', ['bug']]);
+});
+
+test('labels: letters first, deduplicated, numbers left alone', () => {
+  const p = parseQuickAdd('Fix #2 crash #Bug #bug #to-buy', users, thursday);
+  assert.deepEqual([p.title, p.labels], ['Fix #2 crash', ['Bug', 'to-buy']]);
 });
 
 test('dates only count at the end of the line', () => {

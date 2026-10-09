@@ -30,6 +30,7 @@ const COLS: &str = "id, project_id, name, color, category, position";
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/statuses", get(list_all))
         .route("/projects/{id}/statuses", get(list).post(create))
         .route("/statuses/{id}", patch(update).delete(remove))
 }
@@ -63,6 +64,19 @@ async fn list(
             .fetch_all(&mut *conn)
             .await?,
     ))
+}
+
+/// Every status of every active project (My Tasks shows tasks from all of them).
+async fn list_all(State(state): State<AppState>, _: CurrentUser) -> AppResult<Json<Vec<Status>>> {
+    let sql = sqlx::AssertSqlSafe(format!(
+        "SELECT {} FROM statuses s JOIN projects p ON p.id = s.project_id
+         WHERE p.archived = 0 ORDER BY s.project_id, s.position, s.id",
+        COLS.split(", ")
+            .map(|c| format!("s.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    Ok(Json(sqlx::query_as(sql).fetch_all(&state.db).await?))
 }
 
 #[derive(Deserialize)]

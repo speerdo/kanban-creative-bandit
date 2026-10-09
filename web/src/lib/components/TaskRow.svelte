@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { PRIORITIES, type Priority, type Status, type Task, type TaskPatch } from '../api';
+  import { autofocus } from '../actions';
+  import { PRIORITIES, type Priority, type Project, type Status, type Task, type TaskPatch } from '../api';
   import { ink, PRIORITY_COLOR, solid, tint } from '../colors';
   import { isoDate } from '../quickadd';
-  import { people, userById } from '../state.svelte';
+  import { openTask, people, selection, userById } from '../state.svelte';
   import Avatar from './Avatar.svelte';
+  import LabelChips from './LabelChips.svelte';
   import Popover from './Popover.svelte';
   import StatusPill from './StatusPill.svelte';
 
@@ -13,12 +15,17 @@
     statuses,
     onupdate,
     ondelete,
+    project,
+    draggable = true,
   }: {
     task: Task;
     status: Status;
     statuses: Status[];
     onupdate: (patch: TaskPatch) => void;
     ondelete: () => void;
+    /** Shown as a chip (My Tasks lists tasks from every project). */
+    project?: Project;
+    draggable?: boolean;
   } = $props();
 
   let editing = $state(false);
@@ -58,11 +65,13 @@
 <div
   class="row"
   class:done
+  class:selected={selection.taskId === task.id}
   role="listitem"
   data-task={task.id}
   style:--stripe={priorityColor ? solid(priorityColor) : 'transparent'}
+  onmouseenter={() => (selection.taskId = task.id)}
 >
-  <span class="grip" title="Drag to move" aria-hidden="true">⠿</span>
+  {#if draggable}<span class="grip" title="Drag to move" aria-hidden="true">⠿</span>{:else}<span class="grip-space"></span>{/if}
   <input
     type="checkbox"
     class="check"
@@ -73,11 +82,10 @@
 
   <div class="title">
     {#if editing}
-      <!-- svelte-ignore a11y_autofocus -->
       <input
         class="input"
         value={task.title}
-        autofocus
+        use:autofocus
         onblur={saveTitle}
         onkeydown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
@@ -85,7 +93,12 @@
         }}
       />
     {:else}
-      <button class="title-btn" onclick={() => (editing = true)}>{task.title}</button>
+      <button class="title-btn" onclick={() => openTask(task.id)}>{task.title}</button>
+      {#if task.parent_task_id}<span class="sub-mark mono" title="Subtask">subtask</span>{/if}
+      <LabelChips ids={task.label_ids} />
+      {#if project}
+        <span class="project-chip"><span class="pdot" style:background={solid(project.color)}></span>{project.name}</span>
+      {/if}
       {#if task.subtask_count > 0}
         <span class="subs mono" title="Subtasks">☑ {task.subtasks_done}/{task.subtask_count}</span>
       {/if}
@@ -145,6 +158,7 @@
       {#snippet trigger()}
         <button class="icon-btn more" aria-label="Task menu" onclick={() => (menuOpen = !menuOpen)}>⋯</button>
       {/snippet}
+      <button class="item" onclick={() => ((menuOpen = false), openTask(task.id))}>Open details</button>
       <button class="item" onclick={() => ((menuOpen = false), (editing = true))}>Rename</button>
       <button class="item danger" onclick={() => ((menuOpen = false), ondelete())}>Delete task</button>
     </Popover>
@@ -165,6 +179,45 @@
 
   .row:hover {
     background: var(--hover);
+  }
+
+  .row.selected {
+    background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  }
+
+  .grip-space {
+    width: 8px;
+    flex: none;
+  }
+
+  .sub-mark {
+    flex: none;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .project-chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px 1px 6px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    max-width: 140px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .pdot {
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    flex: none;
   }
 
   .grip {
@@ -203,6 +256,7 @@
     border: 0;
     background: none;
     padding: 4px 0;
+    flex: 0 1 auto;
     text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;

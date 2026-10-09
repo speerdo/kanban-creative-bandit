@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { autofocus } from '../actions';
   import type { Status } from '../api';
   import { ink, solid } from '../colors';
   import type { ProjectStore } from '../project.svelte';
   import { parseQuickAdd } from '../quickadd';
   import { sortable } from '../sortable';
-  import { people } from '../state.svelte';
+  import { failed, labelIdsFor, people } from '../state.svelte';
   import Card from './Card.svelte';
 
   let { store }: { store: ProjectStore } = $props();
@@ -23,6 +24,7 @@
       priority: parsed.priority,
       assignee_id: parsed.assignee?.id,
       due_date: parsed.due_date,
+      label_ids: await labelIdsFor(parsed.labels).catch((e) => (failed(e), [])),
     });
     if (ok) draft = '';
   }
@@ -58,13 +60,12 @@
 
       {#if adding === status.id}
         <form class="add" onsubmit={(e) => add(e, status)}>
-          <!-- svelte-ignore a11y_autofocus -->
           <textarea
             bind:value={draft}
             rows="2"
-            placeholder="Task name  !high @kat fri"
+            placeholder="Task name  !high @kat #label fri"
             aria-label="New task in {status.name}"
-            autofocus
+            use:autofocus
             onkeydown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

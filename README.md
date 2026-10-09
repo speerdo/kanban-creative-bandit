@@ -6,10 +6,10 @@ and per-user custom colors, plus a calendar that syncs with Google Calendar and
 Gmail/Drive/Keep hooks. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
-> **Status:** M3 (color and themes): list and board views with drag and drop, live sync, and per-user
-> theme, accent, background and density settings. Next up: M4 (task detail, labels, comments, My Tasks).
-> Google Calendar, Gmail, Drive and shared Lists are planned for M6–M7.
-> See the [roadmap](docs/blueprint.md#8-roadmap).
+> **Status:** M4 (depth): list and board views with drag and drop and live sync; a task detail panel
+> with markdown description, subtasks, labels, comments and history; My Tasks; filters and search;
+> keyboard shortcuts (press `?`); per-user themes. Next up: M5 (backups and ops polish), then Google
+> Calendar (M6) and Gmail, Drive and shared Lists (M7).
 
 ## Quick start
 

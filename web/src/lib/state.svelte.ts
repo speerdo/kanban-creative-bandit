@@ -1,19 +1,38 @@
 // App-wide state: who's signed in, the people and projects, toasts, and the current route.
 
-import { api, ApiError, type Me, type Project, type User } from './api';
+import { api, ApiError, type Label, type Me, type Project, type User } from './api';
 
 export const session = $state<{ me: Me | null; checked: boolean }>({ me: null, checked: false });
 export const people = $state<{ users: User[] }>({ users: [] });
-export const workspace = $state<{ projects: Project[] }>({ projects: [] });
+export const workspace = $state<{ projects: Project[]; labels: Label[] }>({ projects: [], labels: [] });
 
 export function userById(id: number | null | undefined): User | undefined {
   return id == null ? undefined : people.users.find((u) => u.id === id);
 }
 
+export function labelById(id: number): Label | undefined {
+  return workspace.labels.find((l) => l.id === id);
+}
+
 export async function loadWorkspace() {
-  const [users, projects] = await Promise.all([api.users(), api.projects()]);
+  const [users, projects, labels] = await Promise.all([api.users(), api.projects(), api.labels()]);
   people.users = users;
   workspace.projects = projects;
+  workspace.labels = labels;
+}
+
+/** Labels by name for quick add; unknown names are created (shared, so both of us get them). */
+export async function labelIdsFor(names: string[]): Promise<number[]> {
+  const ids: number[] = [];
+  for (const name of names) {
+    let label = workspace.labels.find((l) => l.name.toLowerCase() === name.toLowerCase());
+    if (!label) {
+      label = await api.createLabel({ name, color: 'slate' });
+      if (!workspace.labels.some((l) => l.id === label!.id)) workspace.labels.push(label);
+    }
+    ids.push(label.id);
+  }
+  return ids;
 }
 
 // ---- toasts -------------------------------------------------------------------------------
@@ -41,27 +60,62 @@ export function failed(e: unknown): false {
   return false;
 }
 
-// ---- routing (hash based: #/p/3, #/p/3/board, #/settings) ---------------------------------
+// ---- routing --------------------------------------------------------------------------------
+//
+//   #/p/3  #/p/3/board     a project (no view = the user's default view)
+//   #/my                   My Tasks
+//   #/settings
+//   …/t/42                 on a project or My Tasks: task 42 open in the detail panel
 
 export type View = 'list' | 'board';
-/** A project route without a view opens in the user's default view. */
-export type Route = { name: 'home' } | { name: 'settings' } | { name: 'project'; id: number; view?: View };
+export type Route =
+  | { name: 'home' }
+  | { name: 'settings' }
+  | { name: 'my'; taskId?: number }
+  | { name: 'project'; id: number; view?: View; taskId?: number };
 
 function parse(hash: string): Route {
   if (hash.startsWith('#/settings')) return { name: 'settings' };
+  const task = /\/t\/(\d+)/.exec(hash);
+  const taskId = task ? Number(task[1]) : undefined;
+  if (hash.startsWith('#/my')) return { name: 'my', taskId };
   const m = /^#\/p\/(\d+)(?:\/(list|board))?/.exec(hash);
   if (!m) return { name: 'home' };
-  return { name: 'project', id: Number(m[1]), view: m[2] as View | undefined };
+  return { name: 'project', id: Number(m[1]), view: m[2] as View | undefined, taskId };
+}
+
+function format(route: Route): string {
+  const t = 'taskId' in route && route.taskId ? `/t/${route.taskId}` : '';
+  switch (route.name) {
+    case 'home':
+      return '#/';
+    case 'settings':
+      return '#/settings';
+    case 'my':
+      return `#/my${t}`;
+    case 'project':
+      return `#/p/${route.id}${route.view ? `/${route.view}` : t ? `/${defaultView()}` : ''}${t}`;
+  }
 }
 
 export const router = $state<{ route: Route }>({ route: parse(location.hash) });
 window.addEventListener('hashchange', () => (router.route = parse(location.hash)));
 
+export function go(route: Route) {
+  location.hash = format(route);
+}
+
+/** Opens (or with `null`, closes) the detail panel over the current page. */
+export function openTask(taskId: number | null) {
+  const r = router.route;
+  if (r.name === 'project' || r.name === 'my') go({ ...r, taskId: taskId ?? undefined });
+}
+
 export function defaultView(): View {
   return session.me?.prefs.default_view ?? 'list';
 }
 
-export function go(route: Route) {
-  if (route.name === 'project') location.hash = route.view ? `#/p/${route.id}/${route.view}` : `#/p/${route.id}`;
-  else location.hash = route.name === 'settings' ? '#/settings' : '#/';
-}
+
+// ---- selection (keyboard shortcuts act on this task) ------------------------------------------
+
+export const selection = $state<{ taskId: number | null }>({ taskId: null });

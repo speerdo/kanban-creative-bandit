@@ -20,6 +20,8 @@
     "vite": "^8.3.4"
   },
   "dependencies": {
+    "dompurify": "3.4.16",
+    "marked": "18.0.14",
     "sortablejs": "1.15.7"
   }
 }

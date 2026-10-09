@@ -1,11 +1,13 @@
 <!-- A task on the board. Drag the card anywhere except its buttons. -->
 <script lang="ts">
+  import { autofocus } from '../actions';
   import type { Task } from '../api';
   import { ink, PRIORITY_COLOR, solid, tint } from '../colors';
   import type { ProjectStore } from '../project.svelte';
   import { isoDate } from '../quickadd';
-  import { userById } from '../state.svelte';
+  import { openTask, selection, userById } from '../state.svelte';
   import Avatar from './Avatar.svelte';
+  import LabelChips from './LabelChips.svelte';
   import Popover from './Popover.svelte';
 
   let { task, store }: { task: Task; store: ProjectStore } = $props();
@@ -33,7 +35,19 @@
   }
 </script>
 
-<article class="card" class:done data-task={task.id} style:--stripe={priorityColor ? solid(priorityColor) : 'transparent'}>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions (Enter opens it via the keyboard shortcuts) -->
+<article
+  class="card"
+  class:done
+  class:selected={selection.taskId === task.id}
+  data-task={task.id}
+  style:--stripe={priorityColor ? solid(priorityColor) : 'transparent'}
+  onmouseenter={() => (selection.taskId = task.id)}
+  onclick={(e) => {
+    // Buttons and the rename box handle their own clicks.
+    if (!(e.target as HTMLElement).closest('button, textarea, input, .panel')) openTask(task.id);
+  }}
+>
   <div class="top">
     <button
       class="check"
@@ -42,12 +56,11 @@
       onclick={() => store.updateTask(task, { completed: !done })}>{done ? '✓' : ''}</button
     >
     {#if renaming}
-      <!-- svelte-ignore a11y_autofocus -->
       <textarea
         class="no-drag"
         rows="2"
         value={task.title}
-        autofocus
+        use:autofocus
         onblur={rename}
         onkeydown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
@@ -68,6 +81,10 @@
       <button class="item danger" onclick={() => ((menuOpen = false), store.deleteTask(task))}>Delete task</button>
     </Popover>
   </div>
+
+  {#if task.label_ids.length}
+    <div class="labels"><LabelChips ids={task.label_ids} max={4} /></div>
+  {/if}
 
   {#if task.due_date || task.priority !== 'none' || assignee || task.subtask_count > 0}
     <div class="meta">
@@ -102,6 +119,15 @@
 
   .card:hover {
     border-color: color-mix(in oklch, var(--text-muted) 45%, var(--border));
+  }
+
+  .card.selected {
+    border-color: var(--accent);
+  }
+
+  .labels {
+    margin-top: 6px;
+    padding-left: 26px;
   }
 
   .top {

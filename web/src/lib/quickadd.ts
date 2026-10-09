@@ -5,9 +5,10 @@
 //   today tod tomorrow tmr, mon..sun / monday..sunday           due date (next occurrence, today counts)
 //   2026-10-31, 10/31, 31.10                                     due date
 //
+//   #label                                                      labels (unknown names are created)
+//
 // Dates are only read at the end of the line. Recognised tokens are removed from the title;
-// anything else stays. `#labels` stay in the
-// title until labels land (M4).
+// anything else stays.
 
 import type { Priority, User } from './api';
 
@@ -16,6 +17,7 @@ export type Parsed = {
   priority?: Priority;
   assignee?: User;
   due_date?: string;
+  labels: string[];
 };
 
 const PRIORITY: Record<string, Priority> = {
@@ -83,15 +85,17 @@ export function findUser(name: string, users: User[]): User | undefined {
 }
 
 export function parseQuickAdd(input: string, users: User[], today = new Date()): Parsed {
-  const out: Parsed = { title: '' };
+  const out: Parsed = { title: '', labels: [] };
   const words = input.trim().split(/\s+/).filter(Boolean);
   const priorityOf = (w: string) => (w.length > 1 && w.startsWith('!') ? PRIORITY[w.slice(1).toLowerCase()] : undefined);
   const userOf = (w: string) => (w.length > 1 && w.startsWith('@') ? findUser(w.slice(1), users) : undefined);
+  // `#garden`, `#to-buy`; not `#2` (so "Fix #2" keeps its issue number).
+  const labelOf = (w: string) => (/^#[\p{L}][\p{L}\p{N}_-]{0,39}$/u.test(w) ? w.slice(1) : undefined);
 
   // A date only counts in the trailing run of tokens ("Buy sun cream" keeps its "sun"),
   // and never as the first word ("Today's standup").
   let tail = words.length;
-  while (tail > 1 && (priorityOf(words[tail - 1]) || userOf(words[tail - 1]) || words[tail - 1].startsWith('#') || parseDate(words[tail - 1], today))) {
+  while (tail > 1 && (priorityOf(words[tail - 1]) || userOf(words[tail - 1]) || labelOf(words[tail - 1]) || parseDate(words[tail - 1], today))) {
     tail--;
   }
 
@@ -101,6 +105,11 @@ export function parseQuickAdd(input: string, users: User[], today = new Date()):
     if (priority) return void (out.priority = priority);
     const user = userOf(word);
     if (user) return void (out.assignee = user);
+    const label = labelOf(word);
+    if (label) {
+      if (!out.labels.some((l) => l.toLowerCase() === label.toLowerCase())) out.labels.push(label);
+      return;
+    }
     const date = i >= tail && !out.due_date ? parseDate(word, today) : undefined;
     if (date) return void (out.due_date = date);
     kept.push(word);

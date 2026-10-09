@@ -2,14 +2,19 @@
   import { connect, disconnect } from '../live.svelte';
   import { active } from '../project.svelte';
   import { defaultView, failed, go, loadWorkspace, router, workspace } from '../state.svelte';
+  import { handleShortcut } from '../shortcuts';
+  import MyTasks from './MyTasks.svelte';
   import ProjectView from './ProjectView.svelte';
   import Settings from './Settings.svelte';
+  import ShortcutSheet from './ShortcutSheet.svelte';
+  import TaskDetail from './TaskDetail.svelte';
   import QuickAdd from './QuickAdd.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let loaded = $state(false);
   let navOpen = $state(false);
   let quickAdd = $state(false);
+  let help = $state(false);
 
   $effect(() => {
     connect();
@@ -34,16 +39,19 @@
   });
 
   function onKey(e: KeyboardEvent) {
-    const el = e.target as HTMLElement;
-    const typing = el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'q' || e.key === 'Q') {
-      e.preventDefault();
-      quickAdd = true;
-    }
+    if (quickAdd || help) return; // their dialogs own the keyboard
+    const handled = handleShortcut(
+      e,
+      () => (quickAdd = true),
+      () => (help = true),
+    );
+    if (handled) e.preventDefault();
   }
 
   const current = $derived(router.route.name === 'project' ? router.route : undefined);
+  const openTaskId = $derived(
+    (router.route.name === 'project' || router.route.name === 'my') && router.route.taskId ? router.route.taskId : null,
+  );
   const currentProjectId = $derived(current?.id);
 </script>
 
@@ -59,6 +67,8 @@
       <p class="muted pad">Loading…</p>
     {:else if router.route.name === 'settings'}
       <Settings />
+    {:else if router.route.name === 'my'}
+      <MyTasks />
     {:else if current}
       {#key current.id}
         <ProjectView projectId={current.id} view={current.view ?? defaultView()} />
@@ -71,6 +81,16 @@
     {/if}
   </main>
 </div>
+
+{#if openTaskId !== null}
+  {#key openTaskId}
+    <TaskDetail taskId={openTaskId} />
+  {/key}
+{/if}
+
+{#if help}
+  <ShortcutSheet onclose={() => (help = false)} />
+{/if}
 
 {#if quickAdd}
   <QuickAdd

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { autofocus } from '../actions';
   import { api } from '../api';
   import { solid } from '../colors';
   import { defaultView, failed, go, router, session, workspace } from '../state.svelte';
@@ -42,6 +43,10 @@
     <button class="icon-btn add" title="Quick add (Q)" aria-label="Quick add task" onclick={onquickadd}>＋</button>
   </div>
 
+  <a href="#/my" class="my" class:active={router.route.name === 'my'} aria-current={router.route.name === 'my' ? 'page' : undefined}>
+    <span class="my-icon" aria-hidden="true">✓</span>My tasks
+  </a>
+
   <h3>Projects</h3>
   <ul>
     {#each workspace.projects as p (p.id)}
@@ -56,12 +61,11 @@
 
   {#if adding}
     <form onsubmit={create}>
-      <!-- svelte-ignore a11y_autofocus -->
       <input
         class="input"
         placeholder="Project name"
         bind:value={name}
-        autofocus
+        use:autofocus
         onkeydown={(e) => e.key === 'Escape' && (adding = false)}
         onblur={() => !name.trim() && (adding = false)}
       />
@@ -159,6 +163,17 @@
 
   .new {
     color: var(--text-muted);
+  }
+
+  .my-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 9px;
+    font-weight: 700;
   }
 
   .dot {

@@ -1,10 +1,11 @@
 <!-- Press Q anywhere: one line, parsed live (`Fix login !high @kat fri`), Enter to create. -->
 <script lang="ts">
+  import { autofocus } from '../actions';
   import { untrack } from 'svelte';
   import { api, type Task } from '../api';
   import { ink, PRIORITY_COLOR, solid, tint } from '../colors';
   import { parseQuickAdd } from '../quickadd';
-  import { failed, people, toast, workspace } from '../state.svelte';
+  import { failed, labelIdsFor, people, toast, workspace } from '../state.svelte';
 
   let {
     projectId,
@@ -35,6 +36,7 @@
         priority: parsed.priority,
         assignee_id: parsed.assignee?.id,
         due_date: parsed.due_date,
+        label_ids: await labelIdsFor(parsed.labels),
       });
       toast(`Added “${task.title}”`);
       oncreated(task);
@@ -53,8 +55,7 @@
 
 <dialog bind:this={dialog} onclose={onclose} onclick={(e) => e.target === dialog && dialog.close()}>
   <form onsubmit={submit}>
-    <!-- svelte-ignore a11y_autofocus -->
-    <input class="line" bind:value={text} placeholder="Task name  !high  @kat  fri" aria-label="New task" autofocus />
+    <input class="line" bind:value={text} placeholder="Task name  !high  @kat  #label  fri" aria-label="New task" use:autofocus />
 
     <div class="meta">
       <select class="project" bind:value={target} aria-label="Project" style:--dot={solid(workspace.projects.find((p) => p.id === target)?.color ?? 'slate')}>
@@ -69,6 +70,9 @@
       {#if parsed.assignee}
         <span class="chip">@{parsed.assignee.display_name}</span>
       {/if}
+      {#each parsed.labels as l (l)}
+        <span class="chip">#{l}</span>
+      {/each}
       {#if parsed.due_date}
         <span class="chip">📅 {due(parsed.due_date)}</span>
       {/if}

@@ -70,12 +70,35 @@ export type Task = {
   updated_at: string;
   subtask_count: number;
   subtasks_done: number;
+  label_ids: number[];
+};
+
+export type Label = { id: number; name: string; color: string };
+
+export type Comment = {
+  id: number;
+  task_id: number;
+  project_id: number;
+  author_id: number | null;
+  body: string;
+  created_at: string;
+  edited_at: string | null;
+};
+
+export type Activity = {
+  id: number;
+  task_id: number;
+  actor_id: number | null;
+  kind: string;
+  from_value: string | null;
+  to_value: string | null;
+  created_at: string;
 };
 
 export type Placement = { after_id?: number; before_id?: number };
 
 export type TaskPatch = Partial<
-  Pick<Task, 'title' | 'description' | 'assignee_id' | 'priority' | 'due_date' | 'start_date' | 'status_id'>
+  Pick<Task, 'title' | 'description' | 'assignee_id' | 'priority' | 'due_date' | 'start_date' | 'status_id' | 'label_ids'>
 > & { completed?: boolean };
 
 export type NewTask = {
@@ -87,6 +110,7 @@ export type NewTask = {
   assignee_id?: number | null;
   priority?: Priority;
   due_date?: string | null;
+  label_ids?: number[];
 } & Placement;
 
 export class ApiError extends Error {
@@ -159,10 +183,34 @@ export const api = {
   deleteStatus: (id: number, moveTo?: number) =>
     request<void>('DELETE', `/statuses/${id}${qs({ move_to: moveTo })}`),
 
-  tasks: (f: { project?: number; assignee?: string; status?: number; parent?: number; q?: string } = {}) =>
-    get<Task[]>(`/tasks${qs(f)}`),
+  allStatuses: () => get<Status[]>('/statuses'),
+
+  tasks: (
+    f: {
+      project?: number;
+      assignee?: string;
+      status?: number;
+      parent?: number;
+      label?: number;
+      q?: string;
+      completed?: boolean;
+      any_level?: boolean;
+    } = {},
+  ) => get<Task[]>(`/tasks${qs(f)}`),
+  task: (id: number) => get<Task>(`/tasks/${id}`),
   createTask: (t: NewTask) => request<Task>('POST', '/tasks', t),
   updateTask: (id: number, patch: TaskPatch) => request<Task>('PATCH', `/tasks/${id}`, patch),
   moveTask: (id: number, m: { status_id?: number } & Placement) => request<Task>('POST', `/tasks/${id}/move`, m),
   deleteTask: (id: number) => request<void>('DELETE', `/tasks/${id}`),
+  activity: (taskId: number) => get<Activity[]>(`/tasks/${taskId}/activity`),
+
+  labels: () => get<Label[]>('/labels'),
+  createLabel: (l: { name: string; color?: string }) => request<Label>('POST', '/labels', l),
+  updateLabel: (id: number, l: { name?: string; color?: string }) => request<Label>('PATCH', `/labels/${id}`, l),
+  deleteLabel: (id: number) => request<void>('DELETE', `/labels/${id}`),
+
+  comments: (taskId: number) => get<Comment[]>(`/tasks/${taskId}/comments`),
+  createComment: (taskId: number, body: string) => request<Comment>('POST', `/tasks/${taskId}/comments`, { body }),
+  updateComment: (id: number, body: string) => request<Comment>('PATCH', `/comments/${id}`, { body }),
+  deleteComment: (id: number) => request<void>('DELETE', `/comments/${id}`),
 };

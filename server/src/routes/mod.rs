@@ -1,6 +1,9 @@
 //! JSON API for the task data. Every handler here takes `CurrentUser`, so all of it
 //! requires a session.
 
+mod activity;
+mod comments;
+mod labels;
 mod projects;
 mod statuses;
 mod tasks;
@@ -19,6 +22,9 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
+        .merge(activity::router())
+        .merge(comments::router())
+        .merge(labels::router())
         .merge(projects::router())
         .merge(statuses::router())
         .merge(tasks::router())

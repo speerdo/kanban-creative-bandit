@@ -11,6 +11,7 @@ pub type AppResult<T> = Result<T, AppError>;
 pub enum AppError {
     BadRequest(String),
     Unauthorized,
+    Forbidden(String),
     NotFound,
     Conflict(String),
     Internal(anyhow::Error),
@@ -27,6 +28,7 @@ impl std::fmt::Display for AppError {
         match self {
             Self::BadRequest(m) | Self::Conflict(m) => f.write_str(m),
             Self::Unauthorized => f.write_str("not signed in"),
+            Self::Forbidden(m) => f.write_str(m),
             Self::NotFound => f.write_str("not found"),
             Self::Internal(e) => write!(f, "{e:#}"),
         }
@@ -40,6 +42,7 @@ impl IntoResponse for AppError {
         let (status, msg) = match self {
             Self::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "not signed in".into()),
+            Self::Forbidden(m) => (StatusCode::FORBIDDEN, m),
             Self::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
             Self::Conflict(m) => (StatusCode::CONFLICT, m),
             Self::Internal(e) => {

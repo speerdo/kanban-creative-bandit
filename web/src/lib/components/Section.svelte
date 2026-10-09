@@ -1,12 +1,13 @@
 <!-- One status as a collapsible list section: colored header, its tasks, and an inline add row. -->
 <script lang="ts">
+  import { autofocus } from '../actions';
   import { untrack } from 'svelte';
   import type { Category, Status } from '../api';
   import { ink, solid } from '../colors';
   import type { ProjectStore } from '../project.svelte';
   import { parseQuickAdd } from '../quickadd';
   import { sortable } from '../sortable';
-  import { people } from '../state.svelte';
+  import { failed, labelIdsFor, people } from '../state.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
   import Popover from './Popover.svelte';
   import TaskRow from './TaskRow.svelte';
@@ -54,6 +55,7 @@
       priority: parsed.priority,
       assignee_id: parsed.assignee?.id,
       due_date: parsed.due_date,
+      label_ids: await labelIdsFor(parsed.labels).catch((e) => (failed(e), [])),
     });
     if (ok) draft = ''; // keep focus for the next one
   }
@@ -88,11 +90,10 @@
       >▾</button
     >
     {#if renaming}
-      <!-- svelte-ignore a11y_autofocus -->
       <input
         class="input rename"
         value={status.name}
-        autofocus
+        use:autofocus
         onblur={rename}
         onkeydown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
@@ -165,7 +166,7 @@
         <span class="plus" aria-hidden="true">＋</span>
         <input
           bind:value={draft}
-          placeholder="Add task…  (!high @kat fri)"
+          placeholder="Add task…  (!high @kat #label fri)"
           aria-label="Add task to {status.name}"
           onkeydown={(e) => e.key === 'Escape' && ((draft = ''), e.currentTarget.blur())}
         />

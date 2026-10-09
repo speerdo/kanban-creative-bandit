@@ -4,7 +4,18 @@
 
 import { api, type Category, type NewTask, type Status, type Task, type TaskPatch } from './api';
 import { between } from './position';
-import { failed, toast } from './state.svelte';
+import { failed, session, toast } from './state.svelte';
+
+/** Header filters; applied on the client to the tasks already loaded. */
+export type Filter = {
+  q: string;
+  /** 'any', 'me', 'none' (unassigned), or a user id. */
+  assignee: 'any' | 'me' | 'none' | number;
+  label: number | null;
+  hideDone: boolean;
+};
+
+export const NO_FILTER: Filter = { q: '', assignee: 'any', label: null, hideDone: false };
 
 const byPosition = <T extends { position: string; id: number }>(a: T, b: T) =>
   a.position < b.position ? -1 : a.position > b.position ? 1 : a.id - b.id;
@@ -16,11 +27,28 @@ export class ProjectStore {
   statuses = $state<Status[]>([]);
   tasks = $state<Task[]>([]);
   loading = $state(true);
+  filter = $state<Filter>({ ...NO_FILTER });
 
-  /** Top-level tasks per status, in display order. */
+  filtering = $derived(
+    this.filter.q.trim() !== '' || this.filter.assignee !== 'any' || this.filter.label !== null || this.filter.hideDone,
+  );
+
+  visible(t: Task): boolean {
+    const f = this.filter;
+    if (f.hideDone && t.completed_at) return false;
+    if (f.label !== null && !t.label_ids.includes(f.label)) return false;
+    if (f.assignee === 'none' && t.assignee_id !== null) return false;
+    if (f.assignee === 'me' && t.assignee_id !== session.me?.id) return false;
+    if (typeof f.assignee === 'number' && t.assignee_id !== f.assignee) return false;
+    const q = f.q.trim().toLowerCase();
+    if (q && !t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) return false;
+    return true;
+  }
+
+  /** Visible top-level tasks per status, in display order. */
   byStatus = $derived.by(() => {
     const groups = new Map<number, Task[]>(this.statuses.map((s) => [s.id, []]));
-    for (const t of this.tasks) groups.get(t.status_id)?.push(t);
+    for (const t of this.tasks) if (this.visible(t)) groups.get(t.status_id)?.push(t);
     for (const list of groups.values()) list.sort(byPosition);
     return groups;
   });

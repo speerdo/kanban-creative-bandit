@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { autofocus } from '../actions';
   import { api } from '../api';
   import { solid } from '../colors';
-  import { live } from '../live.svelte';
-  import { active, ProjectStore } from '../project.svelte';
-  import { failed, go, toast, workspace, type View } from '../state.svelte';
+  import { listen, live } from '../live.svelte';
+  import { active, NO_FILTER, ProjectStore } from '../project.svelte';
+  import { failed, go, people, toast, workspace, type View } from '../state.svelte';
   import BoardView from './BoardView.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
   import ListView from './ListView.svelte';
@@ -23,7 +24,9 @@
     store = s;
     active.store = s;
     s.load();
+    const unlisten = listen({ event: (kind, data) => s.apply(kind, data), resync: () => s.load() });
     return () => {
+      unlisten();
       if (active.store === s) active.store = null;
     };
   });
@@ -92,11 +95,10 @@
     </Popover>
 
     {#if renaming}
-      <!-- svelte-ignore a11y_autofocus -->
       <input
         class="input title-input"
         value={project.name}
-        autofocus
+        use:autofocus
         onblur={rename}
         onkeydown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
@@ -134,6 +136,55 @@
       <button class="item danger" onclick={remove}>Delete project…</button>
     </Popover>
   </header>
+
+  {#if store}
+    {@const f = store.filter}
+    <div class="filters" role="search">
+      <input
+        id="task-search"
+        class="input search"
+        type="search"
+        placeholder="Search  ( / )"
+        aria-label="Search tasks"
+        bind:value={f.q}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') {
+            f.q = '';
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      <select
+        class="input"
+        aria-label="Assignee"
+        value={String(f.assignee)}
+        onchange={(e) => {
+          const v = e.currentTarget.value;
+          f.assignee = v === 'any' || v === 'me' || v === 'none' ? v : Number(v);
+        }}
+      >
+        <option value="any">Anyone</option>
+        <option value="me">Me</option>
+        {#each people.users as u (u.id)}<option value={String(u.id)}>{u.display_name}</option>{/each}
+        <option value="none">Unassigned</option>
+      </select>
+      {#if workspace.labels.length}
+        <select
+          class="input"
+          aria-label="Label"
+          value={f.label === null ? '' : String(f.label)}
+          onchange={(e) => (f.label = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+        >
+          <option value="">Any label</option>
+          {#each workspace.labels as l (l.id)}<option value={String(l.id)}>{l.name}</option>{/each}
+        </select>
+      {/if}
+      <label class="hide-done"><input type="checkbox" bind:checked={f.hideDone} /> Hide completed</label>
+      {#if store.filtering}
+        <button class="btn clear" onclick={() => Object.assign(f, NO_FILTER)}>Clear</button>
+      {/if}
+    </div>
+  {/if}
 
   {#if !store || store.loading}
     <p class="muted loading">Loading…</p>
@@ -233,6 +284,38 @@
     font-weight: 600;
   }
 
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px 0;
+  }
+
+  .filters .input {
+    width: auto;
+    padding: 5px 8px;
+  }
+
+  .filters .search {
+    width: 220px;
+  }
+
+  .hide-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+
+  .clear {
+    padding: 4px 10px;
+  }
+
   .loading {
     padding: 16px 24px;
     color: var(--on-canvas-muted);
@@ -241,6 +324,14 @@
   @media (max-width: 760px) {
     header {
       padding-left: 52px;
+    }
+
+    .filters {
+      padding: 8px 8px 0;
+    }
+
+    .filters .search {
+      flex: 1 1 100%;
     }
   }
 </style>

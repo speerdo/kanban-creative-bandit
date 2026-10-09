@@ -105,6 +105,12 @@ impl Client {
         (status, value)
     }
 
+    async fn login_as(&mut self, username: &str) {
+        let body = json!({"username": username, "password": "password1"});
+        let (status, _) = self.call(Method::POST, "/api/auth/login", Some(body)).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
     async fn ok(&mut self, method: Method, uri: &str, body: Option<Value>) -> Value {
         let (status, v) = self.call(method, uri, body).await;
         assert!(status.is_success(), "{uri}: {status} {v}");
@@ -560,4 +566,200 @@ async fn profile_update_is_broadcast() {
         )
         .await;
     assert_eq!(p["color"], "#ffe800");
+}
+
+#[tokio::test]
+async fn labels_on_tasks_filter_and_history() {
+    let mut c = Client::new().await;
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "P"})))
+        .await;
+    let bug = c
+        .ok(
+            Method::POST,
+            "/api/labels",
+            Some(json!({"name": "bug", "color": "red"})),
+        )
+        .await;
+    let garden = c
+        .ok(
+            Method::POST,
+            "/api/labels",
+            Some(json!({"name": "Garden", "color": "green"})),
+        )
+        .await;
+    let (status, _) = c
+        .call(Method::POST, "/api/labels", Some(json!({"name": "BUG"})))
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "names are unique, ignoring case"
+    );
+
+    let t = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(
+                json!({"project_id": p["id"], "title": "weed beds", "label_ids": [garden["id"]],
+                        "description": "the raised ones by the shed"}),
+            ),
+        )
+        .await;
+    assert_eq!(t["label_ids"], json!([garden["id"]]));
+    let url = format!("/api/tasks/{}", t["id"]);
+
+    let me = c.ok(Method::GET, "/api/me", None).await;
+    let statuses = c.ok(Method::GET, "/api/statuses", None).await;
+    c.ok(
+        Method::PATCH,
+        &url,
+        Some(
+            json!({"label_ids": [bug["id"], garden["id"]], "priority": "high",
+                    "assignee_id": me["id"], "status_id": statuses[2]["id"]}),
+        ),
+    )
+    .await;
+    c.ok(Method::PATCH, &url, Some(json!({"completed": true})))
+        .await;
+
+    let by_label = c
+        .ok(
+            Method::GET,
+            &format!("/api/tasks?label={}", bug["id"]),
+            None,
+        )
+        .await;
+    assert_eq!(titles(&by_label), ["weed beds"]);
+    let found = c.ok(Method::GET, "/api/tasks?q=SHED", None).await;
+    assert_eq!(titles(&found), ["weed beds"], "search covers descriptions");
+
+    let log = c.ok(Method::GET, &format!("{url}/activity"), None).await;
+    let entries: Vec<(&str, Option<&str>, Option<&str>)> = log
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| {
+            (
+                a["kind"].as_str().unwrap(),
+                a["from_value"].as_str(),
+                a["to_value"].as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("created", None, None),
+            ("assignee", None, Some("Adam")),
+            ("priority", Some("none"), Some("high")),
+            ("labels", Some("Garden"), Some("bug, Garden")),
+            ("status", Some("Backlog"), Some("In Progress")),
+            ("status", Some("In Progress"), Some("Done")),
+            ("completed", None, None),
+        ]
+    );
+
+    // Deleting a label takes it off its tasks.
+    c.ok(Method::DELETE, &format!("/api/labels/{}", bug["id"]), None)
+        .await;
+    let t = c.ok(Method::GET, &url, None).await;
+    assert_eq!(t["label_ids"], json!([garden["id"]]));
+}
+
+#[tokio::test]
+async fn comments_belong_to_their_author() {
+    let mut c = Client::new().await;
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "P"})))
+        .await;
+    let t = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(json!({"project_id": p["id"], "title": "t"})),
+        )
+        .await;
+    let url = format!("/api/tasks/{}/comments", t["id"]);
+    let comment = c
+        .ok(
+            Method::POST,
+            &url,
+            Some(json!({"body": "  **looks good**  "})),
+        )
+        .await;
+    assert_eq!(comment["body"], "**looks good**");
+    assert_eq!(comment["project_id"], p["id"]);
+    let (status, _) = c
+        .call(Method::POST, &url, Some(json!({"body": "   "})))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    c.login_as("kat").await;
+    let curl = format!("/api/comments/{}", comment["id"]);
+    let (status, _) = c
+        .call(Method::PATCH, &curl, Some(json!({"body": "hijack"})))
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = c.call(Method::DELETE, &curl, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    c.ok(Method::POST, &url, Some(json!({"body": "agreed"})))
+        .await;
+
+    c.login_as("adam").await;
+    let edited = c
+        .ok(Method::PATCH, &curl, Some(json!({"body": "looks great"})))
+        .await;
+    assert!(edited["edited_at"].is_string());
+    let all = c.ok(Method::GET, &url, None).await;
+    let bodies: Vec<_> = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(bodies, ["looks great", "agreed"]);
+    c.ok(Method::DELETE, &curl, None).await;
+
+    let (status, _) = c
+        .call(
+            Method::POST,
+            "/api/tasks/9999/comments",
+            Some(json!({"body": "x"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn my_tasks_include_subtasks_when_asked() {
+    let mut c = Client::new().await;
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "P"})))
+        .await;
+    let me = c.ok(Method::GET, "/api/me", None).await;
+    let parent = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(json!({"project_id": p["id"], "title": "parent"})),
+        )
+        .await;
+    c.ok(
+        Method::POST,
+        "/api/tasks",
+        Some(json!({"parent_task_id": parent["id"], "title": "mine", "assignee_id": me["id"]})),
+    )
+    .await;
+    let top = c.ok(Method::GET, "/api/tasks?assignee=me", None).await;
+    assert_eq!(titles(&top).len(), 0);
+    let all = c
+        .ok(
+            Method::GET,
+            "/api/tasks?assignee=me&any_level=true&completed=false",
+            None,
+        )
+        .await;
+    assert_eq!(titles(&all), ["mine"]);
 }

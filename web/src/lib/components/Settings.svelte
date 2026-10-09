@@ -1,9 +1,10 @@
 <!-- Settings: appearance (applied live as you click), default view, and profile. Prefs are
      saved per user on the server, so they follow you to every device. -->
 <script lang="ts">
-  import { api, type Prefs, type Status, type Task } from '../api';
-  import { COLORS } from '../colors';
-  import { failed, session } from '../state.svelte';
+  import { api, type Label, type Prefs, type Status, type Task } from '../api';
+  import { COLORS, solid } from '../colors';
+  import { failed, session, workspace } from '../state.svelte';
+  import Popover from './Popover.svelte';
   import Avatar from './Avatar.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
   import StatusPill from './StatusPill.svelte';
@@ -49,6 +50,31 @@
     } catch (e) {
       failed(e);
       name = session.me!.display_name;
+    }
+  }
+
+  // ---- labels (shared by both of us) ----------------------------------------------------------
+
+  let labelColorOpen = $state<number | null>(null);
+
+  async function updateLabel(l: Label, patch: { name?: string; color?: string }) {
+    const before = { ...l };
+    Object.assign(l, patch);
+    try {
+      Object.assign(l, await api.updateLabel(l.id, patch));
+    } catch (e) {
+      Object.assign(l, before);
+      failed(e);
+    }
+  }
+
+  async function deleteLabel(l: Label) {
+    if (!confirm(`Delete the label “${l.name}”? It comes off every task that has it.`)) return;
+    try {
+      await api.deleteLabel(l.id);
+      workspace.labels = workspace.labels.filter((x) => x.id !== l.id);
+    } catch (e) {
+      failed(e);
     }
   }
 
@@ -128,6 +154,50 @@
         <span class="label">Projects open in</span>
         {@render segmented('Default view', VIEWS, prefs.default_view, (v) => set({ default_view: v }))}
       </div>
+    </section>
+
+    <section class="panel">
+      <h2>Labels</h2>
+      {#if workspace.labels.length === 0}
+        <p class="hint">No labels yet. Add them from a task, or type <code>#name</code> in quick add.</p>
+      {:else}
+        <ul class="labels">
+          {#each workspace.labels as l (l.id)}
+            <li>
+              <Popover open={labelColorOpen === l.id}>
+                {#snippet trigger()}
+                  <button
+                    class="label-swatch"
+                    style:background={solid(l.color)}
+                    aria-label="Color of {l.name}"
+                    onclick={() => (labelColorOpen = labelColorOpen === l.id ? null : l.id)}
+                  ></button>
+                {/snippet}
+                <ColorSwatches
+                  value={l.color}
+                  onpick={(c) => {
+                    labelColorOpen = null;
+                    if (c) updateLabel(l, { color: c });
+                  }}
+                />
+              </Popover>
+              <input
+                class="input"
+                value={l.name}
+                aria-label="Label name"
+                maxlength="40"
+                onblur={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  if (v && v !== l.name) updateLabel(l, { name: v });
+                  else e.currentTarget.value = l.name;
+                }}
+                onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              />
+              <button class="icon-btn" aria-label="Delete label {l.name}" onclick={() => deleteLabel(l)}>✕</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </section>
 
     <section class="panel">
@@ -268,6 +338,32 @@
     color: var(--text);
     font-weight: 600;
     box-shadow: 0 1px 2px var(--shadow-2);
+  }
+
+  .labels {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .labels li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .labels .input {
+    padding: 5px 8px;
+  }
+
+  .label-swatch {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
   }
 
   .preview {
