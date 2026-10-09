@@ -7,6 +7,8 @@
 //! credential or named by `KANBAN_TOKEN_KEY_FILE`. Without them the app runs with Google off.
 
 pub mod calendar;
+pub mod drive;
+pub mod gmail;
 mod oauth;
 mod routes;
 pub mod sync;
@@ -39,6 +41,8 @@ pub struct Endpoints {
     pub token: String,
     pub revoke: String,
     pub calendar: String,
+    pub gmail: String,
+    pub drive: String,
 }
 
 impl Endpoints {
@@ -50,6 +54,8 @@ impl Endpoints {
             token: format!("{base}/token"),
             revoke: format!("{base}/revoke"),
             calendar: format!("{base}/cal"),
+            gmail: format!("{base}/gmail"),
+            drive: format!("{base}/drive"),
         }
     }
 }
@@ -61,6 +67,8 @@ impl Default for Endpoints {
             token: "https://oauth2.googleapis.com/token".into(),
             revoke: "https://oauth2.googleapis.com/revoke".into(),
             calendar: "https://www.googleapis.com/calendar/v3".into(),
+            gmail: "https://gmail.googleapis.com/gmail/v1".into(),
+            drive: "https://www.googleapis.com/drive/v3".into(),
         }
     }
 }
@@ -322,13 +330,15 @@ impl Google {
     /// A Calendar API URL from path segments (each one percent-encoded, since calendar ids
     /// contain `@` and `#`).
     fn calendar_url(&self, segments: &[&str]) -> GResult<Url> {
-        let mut url = Url::parse(&self.cfg()?.endpoints.calendar)
-            .map_err(|e| anyhow!("bad calendar endpoint: {e}"))?;
-        url.path_segments_mut()
-            .map_err(|_| anyhow!("bad calendar endpoint"))?
-            .pop_if_empty()
-            .extend(segments);
-        Ok(url)
+        api_url(&self.cfg()?.endpoints.calendar, segments)
+    }
+
+    fn gmail_url(&self, segments: &[&str]) -> GResult<Url> {
+        api_url(&self.cfg()?.endpoints.gmail, segments)
+    }
+
+    fn drive_url(&self, segments: &[&str]) -> GResult<Url> {
+        api_url(&self.cfg()?.endpoints.drive, segments)
     }
 
     /// One authorized JSON call. `Ok(None)` for an empty response (a delete).
@@ -370,6 +380,42 @@ impl Google {
             _ => GoogleError::Api(status, google_message(&text)),
         })
     }
+}
+
+fn api_url(base: &str, segments: &[&str]) -> GResult<Url> {
+    let mut url = Url::parse(base).map_err(|e| anyhow!("bad Google endpoint {base}: {e}"))?;
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("bad Google endpoint {base}"))?
+        .pop_if_empty()
+        .extend(segments);
+    Ok(url)
+}
+
+/// Optional parts of the connection, each asked for only when it's turned on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Feature {
+    Gmail,
+    Drive,
+}
+
+impl Feature {
+    pub fn scope(self) -> &'static str {
+        match self {
+            Self::Gmail => "https://www.googleapis.com/auth/gmail.modify",
+            Self::Drive => "https://www.googleapis.com/auth/drive.metadata.readonly",
+        }
+    }
+}
+
+/// Whether `user` granted `feature`'s scope.
+pub async fn granted(db: &SqlitePool, user: i64, feature: Feature) -> sqlx::Result<bool> {
+    let scopes: Option<String> =
+        sqlx::query_scalar("SELECT granted_scopes FROM google_accounts WHERE user_id = ?")
+            .bind(user)
+            .fetch_optional(db)
+            .await?;
+    Ok(scopes.is_some_and(|s| s.split_whitespace().any(|x| x == feature.scope())))
 }
 
 #[derive(Debug, Deserialize)]

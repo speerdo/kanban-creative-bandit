@@ -2,7 +2,7 @@
 // The browser reconnects by itself after a dropped connection or a server restart; since
 // events may have been missed meanwhile, every reconnect (and any `resync`) refetches.
 
-import type { Label, Prefs, Project, User } from './api';
+import type { Label, Prefs, Project, ShoppingList, User } from './api';
 import { loadWorkspace, people, session, workspace } from './state.svelte';
 
 export const live = $state<{ connected: boolean }>({ connected: false });
@@ -37,6 +37,11 @@ const KINDS = [
   'comment.updated',
   'comment.deleted',
   'calendar.synced',
+  'list_item.updated',
+  'list_item.deleted',
+  'list.cleared',
+  'link.created',
+  'link.deleted',
 ];
 
 export function connect() {
@@ -89,6 +94,27 @@ export function connect() {
     const { id } = JSON.parse((e as MessageEvent).data).data;
     workspace.labels = workspace.labels.filter((l) => l.id !== id);
     for (const l of listeners) l.resync(); // tasks lose the label
+  });
+
+  const listSort = () =>
+    workspace.lists.sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : a.id - b.id));
+  for (const kind of ['list.created', 'list.updated']) {
+    source.addEventListener(kind, (e) => {
+      const l: ShoppingList = JSON.parse((e as MessageEvent).data).data;
+      const known = workspace.lists.find((x) => x.id === l.id);
+      if (known) Object.assign(known, l);
+      else workspace.lists.push(l);
+      listSort();
+    });
+  }
+  source.addEventListener('list.deleted', (e) => {
+    const { id } = JSON.parse((e as MessageEvent).data).data;
+    workspace.lists = workspace.lists.filter((l) => l.id !== id);
+  });
+  // A bulk import: refetch.
+  source.addEventListener('lists.changed', () => {
+    loadWorkspace().catch(() => {});
+    for (const l of listeners) l.resync();
   });
 
   source.addEventListener('project.created', (e) => {

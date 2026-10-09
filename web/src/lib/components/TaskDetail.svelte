@@ -13,6 +13,7 @@
   import Markdown from './Markdown.svelte';
   import Popover from './Popover.svelte';
   import StatusPill from './StatusPill.svelte';
+  import TaskLinks from './TaskLinks.svelte';
 
   let { taskId }: { taskId: number } = $props();
 
@@ -21,7 +22,12 @@
   const storeTask = $derived(active.store?.tasks.find((t) => t.id === taskId));
   const task = $derived(storeTask ?? local);
 
-  let statuses = $state<Status[]>([]);
+  let fetchedStatuses = $state<Status[]>([]);
+  // The open project's columns, live, once they've loaded; otherwise our own fetch (opening a
+  // task URL directly can get here before the project has loaded).
+  const statuses = $derived(
+    active.store?.id === task?.project_id && active.store?.statuses.length ? active.store!.statuses : fetchedStatuses,
+  );
   let subtasks = $state<Task[]>([]);
   let comments = $state<Comment[]>([]);
   let activity = $state<Activity[]>([]);
@@ -37,12 +43,12 @@
       local = t;
       missing = false;
       const [s, subs, c, a] = await Promise.all([
-        active.store?.id === t.project_id ? Promise.resolve(active.store.statuses) : api.statuses(t.project_id),
+        api.statuses(t.project_id),
         api.tasks({ parent: t.id }),
         api.comments(t.id),
         api.activity(t.id),
       ]);
-      statuses = s;
+      fetchedStatuses = s;
       subtasks = subs.sort((x, y) => (x.position < y.position ? -1 : 1));
       comments = c;
       activity = a;
@@ -441,6 +447,8 @@
           </button>
         {/if}
       </section>
+
+      <TaskLinks taskId={task.id} />
 
       <section>
         <h3>Subtasks {#if subtasks.length}<span class="count mono">{subtasks.filter((s) => s.completed_at).length}/{subtasks.length}</span>{/if}</h3>

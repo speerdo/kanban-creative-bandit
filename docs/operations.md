@@ -77,6 +77,16 @@ Each of us connects our own Google account in **Settings → Google** (setup:
 - Outbound only: the server calls `oauth2.googleapis.com` and `www.googleapis.com` over HTTPS.
   Nothing new is exposed.
 
+## Lists on the phones
+
+Shared lists (groceries, household) live under **Lists** in the sidebar. Changes show up on the other
+phone straight away.
+
+- **Add to Home Screen:** in Safari, use Share → Add to Home Screen. In Chrome, use ⋮ → Add to Home screen.
+  The icon opens straight to the last list you used.
+- **Away from home:** the app is LAN-only, so a list at the store needs remote access. Set up Tailscale
+  (below) once.
+
 ## Backups
 
 - **Nightly:** the `kanban-backup.timer` timer runs at about 03:30 (with a random delay of up to 15 minutes, and a catch-up after a power cut)

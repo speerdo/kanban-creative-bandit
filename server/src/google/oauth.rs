@@ -8,7 +8,9 @@ use reqwest::Url;
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
-use super::{GResult, Google, GoogleError, Pending, id_claims, random_token, token_response};
+use super::{
+    Feature, GResult, Google, GoogleError, Pending, id_claims, random_token, token_response,
+};
 use crate::error::AppError;
 
 /// Desktop clients may redirect to any loopback port. Nothing listens here; the page fails to
@@ -21,8 +23,13 @@ const SCOPES: &str = "openid email https://www.googleapis.com/auth/calendar";
 const PENDING_FOR: Duration = Duration::from_secs(30 * 60);
 
 impl Google {
-    /// Starts a connection for `user`: the Google consent page to open.
-    pub fn start(&self, user: i64) -> GResult<String> {
+    /// Starts a connection for `user`: the Google consent page to open. `features` adds their
+    /// scopes; scopes granted before are kept (incremental authorization).
+    pub fn start(&self, user: i64, features: &[Feature]) -> GResult<String> {
+        let scopes = std::iter::once(SCOPES)
+            .chain(features.iter().map(|f| f.scope()))
+            .collect::<Vec<_>>()
+            .join(" ");
         use base64::Engine as _;
         let cfg = self.cfg()?;
         let verifier = random_token(48)?;
@@ -35,7 +42,7 @@ impl Google {
                 ("client_id", cfg.client_id.as_str()),
                 ("redirect_uri", REDIRECT_URI),
                 ("response_type", "code"),
-                ("scope", SCOPES),
+                ("scope", scopes.as_str()),
                 ("state", &state),
                 ("code_challenge", &challenge),
                 ("code_challenge_method", "S256"),

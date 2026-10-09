@@ -776,3 +776,245 @@ async fn my_tasks_include_subtasks_when_asked() {
         .await;
     assert_eq!(titles(&all), ["mine"]);
 }
+
+#[tokio::test]
+async fn shared_lists_reuse_items_and_clear_checked() {
+    let mut c = Client::new().await;
+    let mut events = c.events.subscribe();
+    let list = c
+        .ok(
+            Method::POST,
+            "/api/lists",
+            Some(json!({"name": "Groceries"})),
+        )
+        .await;
+    let id = list["id"].as_i64().unwrap();
+    assert_eq!(list["open_count"], 0);
+
+    // A pasted list becomes one item per line.
+    let added = c
+        .ok(
+            Method::POST,
+            &format!("/api/lists/{id}/items"),
+            Some(json!({"text": "Milk\n- Eggs\n\nBread"})),
+        )
+        .await;
+    assert_eq!(added.as_array().unwrap().len(), 3);
+    let items = c
+        .ok(Method::GET, &format!("/api/lists/{id}/items"), None)
+        .await;
+    let texts: Vec<&str> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(texts, ["Milk", "Eggs", "Bread"]);
+
+    // Kat checks off milk; it's live for Adam's phone.
+    c.login_as("kat").await;
+    let milk = items[0]["id"].as_i64().unwrap();
+    let checked = c
+        .ok(
+            Method::PATCH,
+            &format!("/api/list-items/{milk}"),
+            Some(json!({"checked": true})),
+        )
+        .await;
+    assert!(checked["checked_at"].is_string());
+    assert_eq!(checked["checked_by"], 2);
+    let mut kinds = vec![];
+    while let Ok(e) = events.try_recv() {
+        kinds.push(e.kind);
+    }
+    assert!(kinds.contains(&"list_item.updated") && kinds.contains(&"list.updated"));
+
+    // Adding "milk" next week brings the same item back instead of a duplicate.
+    let again = c
+        .ok(
+            Method::POST,
+            &format!("/api/lists/{id}/items"),
+            Some(json!({"text": "milk"})),
+        )
+        .await;
+    assert_eq!(again[0]["id"], milk);
+    assert_eq!(again[0]["checked_at"], Value::Null);
+    let lists = c.ok(Method::GET, "/api/lists", None).await;
+    assert_eq!(lists[0]["open_count"], 3);
+
+    // Check two, clear checked: only the open one is left.
+    for item in &items.as_array().unwrap()[..2] {
+        c.ok(
+            Method::PATCH,
+            &format!("/api/list-items/{}", item["id"]),
+            Some(json!({"checked": true})),
+        )
+        .await;
+    }
+    let r = c
+        .ok(
+            Method::POST,
+            &format!("/api/lists/{id}/clear-checked"),
+            None,
+        )
+        .await;
+    assert_eq!(r["removed"], 2);
+    let items = c
+        .ok(Method::GET, &format!("/api/lists/{id}/items"), None)
+        .await;
+    assert_eq!(items[0]["text"], "Bread");
+    assert_eq!(items.as_array().unwrap().len(), 1);
+
+    // Reorder and rename.
+    let bread = items[0]["id"].as_i64().unwrap();
+    let added = c
+        .ok(
+            Method::POST,
+            &format!("/api/lists/{id}/items"),
+            Some(json!({"text": "Apples"})),
+        )
+        .await;
+    c.ok(
+        Method::PATCH,
+        &format!("/api/list-items/{}", added[0]["id"]),
+        Some(json!({"before_id": bread, "text": "Green apples"})),
+    )
+    .await;
+    let items = c
+        .ok(Method::GET, &format!("/api/lists/{id}/items"), None)
+        .await;
+    assert_eq!(items[0]["text"], "Green apples");
+
+    let (status, _) = c
+        .call(
+            Method::POST,
+            &format!("/api/lists/{id}/items"),
+            Some(json!({"text": "  "})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = c
+        .call(Method::DELETE, &format!("/api/lists/{id}"), None)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = c
+        .call(Method::GET, &format!("/api/lists/{id}/items"), None)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn task_links_by_kind() {
+    let mut c = Client::new().await;
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "P"})))
+        .await;
+    let t = c
+        .ok(
+            Method::POST,
+            "/api/tasks",
+            Some(json!({"project_id": p["id"], "title": "T"})),
+        )
+        .await;
+    let path = format!("/api/tasks/{}/links", t["id"]);
+    let doc = c
+        .ok(
+            Method::POST,
+            &path,
+            Some(json!({"url": "https://docs.google.com/document/d/abc/edit", "title": "Brief"})),
+        )
+        .await;
+    assert_eq!(
+        (
+            doc["kind"].as_str(),
+            doc["external_id"].as_str(),
+            doc["title"].as_str()
+        ),
+        (Some("doc"), Some("abc"), Some("Brief"))
+    );
+    c.ok(
+        Method::POST,
+        &path,
+        Some(json!({"url": "https://example.com/x"})),
+    )
+    .await;
+    let (status, _) = c
+        .call(
+            Method::POST,
+            &path,
+            Some(json!({"url": "javascript:alert(1)"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let links = c.ok(Method::GET, &path, None).await;
+    assert_eq!(links.as_array().unwrap().len(), 2);
+    let (status, _) = c
+        .call(Method::DELETE, &format!("{path}/{}", doc["id"]), None)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let links = c.ok(Method::GET, &path, None).await;
+    assert_eq!(links[0]["kind"], "url");
+}
+
+#[tokio::test]
+async fn keep_import_dry_run_then_real() {
+    let mut c = Client::new().await;
+    let p = c
+        .ok(Method::POST, "/api/projects", Some(json!({"name": "Home"})))
+        .await;
+    c.ok(
+        Method::POST,
+        "/api/lists",
+        Some(json!({"name": "groceries"})),
+    )
+    .await;
+    let notes = json!([
+        {"title": "Groceries", "items": [{"text": "Milk"}, {"text": "Rice", "checked": true}]},
+        {"title": "Hardware store", "items": [{"text": "Screws"}]},
+        {"title": "", "text": "Call the vet\nAsk about the shots"},
+        {"title": "Old idea", "text": "x", "archived": true},
+        {"title": "Gone", "text": "x", "trashed": true},
+    ]);
+    let body = |dry: bool| json!({"notes": notes, "project_id": p["id"], "dry_run": dry});
+
+    let r = c
+        .ok(Method::POST, "/api/import/keep", Some(body(true)))
+        .await;
+    assert_eq!(r["dry_run"], true);
+    assert_eq!(r["lists"][0]["merged"], true, "same name, any case");
+    assert_eq!(r["lists"][1]["merged"], false);
+    assert_eq!(r["tasks"], json!(["Call the vet"]));
+    assert_eq!(r["skipped"], 2);
+    // Nothing changed.
+    let lists = c.ok(Method::GET, "/api/lists", None).await;
+    assert_eq!(lists.as_array().unwrap().len(), 1);
+
+    c.ok(Method::POST, "/api/import/keep", Some(body(false)))
+        .await;
+    let lists = c.ok(Method::GET, "/api/lists", None).await;
+    let names: Vec<(&str, i64)> = lists
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| {
+            (
+                l["name"].as_str().unwrap(),
+                l["open_count"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [("groceries", 1), ("Hardware store", 1)],
+        "checked items stay checked"
+    );
+    let tasks = c
+        .ok(
+            Method::GET,
+            &format!("/api/tasks?project={}", p["id"]),
+            None,
+        )
+        .await;
+    assert_eq!(tasks[0]["title"], "Call the vet");
+    assert_eq!(tasks[0]["description"], "Ask about the shots");
+}

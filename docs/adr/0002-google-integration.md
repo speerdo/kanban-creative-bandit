@@ -1,6 +1,6 @@
 # ADR 0002: Google integration
 
-- **Status:** Accepted. Calendar was built in M6; Gmail, Drive and Lists come in M7.
+- **Status:** Accepted. Calendar was built in M6; Gmail, Drive, Lists and the Keep import in M7.
 - **Date:** 2026-10-09
 - **Deciders:** Adam, Kat
 

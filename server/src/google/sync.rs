@@ -35,6 +35,8 @@ pub struct PullReport {
     /// Tasks whose due date followed their event in Google.
     pub tasks_changed: usize,
     pub overlay_events: usize,
+    /// Gmail threads that became tasks.
+    pub emails_imported: usize,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -156,6 +158,7 @@ async fn pull_locked(state: &AppState, user: i64) -> GResult<PullReport> {
             _ => report.overlay_events += pull_overlay(&state.google, db, user, cal).await?,
         }
     }
+    report.emails_imported = super::gmail::import(state, user).await?;
     Ok(report)
 }
 

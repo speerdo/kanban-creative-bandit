@@ -20,4 +20,4 @@ Decisions we still need from Adam & Kat before or during Milestone 1:
 6. ~~**Google calendar target**~~ (decided 2026-10-09): a separate "Kanban" calendar. Google → app is pulled automatically. App → Google happens only via a **Push to Google** button.
 7. ~~**Keep**~~ (decided 2026-10-09): what we use it for is shared grocery and household lists. These become in-app **Lists** (M7). A Keep import is a nice-to-have.
 8. ~~**Gmail**~~ (decided 2026-10-09): label a thread `Kanban` → it becomes a task.
-9. **Remote access is now needed** for Lists to be useful at the store. Set up Tailscale on the server and both phones before M7? (This also answers question 4.)
+9. **Remote access** for Lists at the store: Lists shipped in M7 and work on home Wi-Fi now. Away from home needs Tailscale on the server and both phones (steps in operations.md, "Remote access"). Still to do; this also answers question 4.

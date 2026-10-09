@@ -2,9 +2,9 @@
      sync, push, disconnect. Each of us connects our own account. -->
 <script lang="ts">
   import { autofocus } from '../actions';
-  import { api, type CalendarOption } from '../api';
+  import { api, type CalendarOption, type GoogleFeature } from '../api';
   import { google, loadGoogle, push, since, syncNow } from '../google.svelte';
-  import { failed, toast } from '../state.svelte';
+  import { failed, toast, workspace } from '../state.svelte';
 
   /** 'idle' → 'waiting' (Google tab open, waiting for the pasted address) → connected. */
   let step = $state<'idle' | 'waiting'>('idle');
@@ -42,12 +42,13 @@
     }
   }
 
-  async function connect() {
+  /** Connects, or asks for more access (`features`) with the same paste-back. */
+  async function connect(features: GoogleFeature[] = []) {
     // Open the tab synchronously, so the popup blocker allows it, then point it at Google.
     const tab = window.open('about:blank', '_blank');
     busy = true;
     try {
-      authUrl = (await api.googleStart()).auth_url;
+      authUrl = (await api.googleStart(features)).auth_url;
       if (tab) tab.location.href = authUrl;
       step = 'waiting';
       pasted = '';
@@ -64,9 +65,10 @@
     if (!pasted.trim()) return;
     busy = true;
     try {
+      const wasConnected = google.status?.connected;
       google.status = await api.googleFinish(pasted.trim());
       step = 'idle';
-      toast(`Connected ${google.status.email}`);
+      toast(wasConnected ? 'Google access updated' : `Connected ${google.status.email}`);
       await loadOptions();
     } catch (err) {
       failed(err);
@@ -88,6 +90,20 @@
       failed(e);
     } finally {
       saving = false;
+    }
+  }
+
+  let gmailProject = $state<number | null>(null);
+  $effect(() => {
+    if (gmailProject === null) gmailProject = google.status?.gmail_project_id ?? workspace.projects[0]?.id ?? null;
+  });
+
+  async function setGmail(enabled: boolean) {
+    try {
+      google.status = await api.googleGmail({ enabled, project_id: gmailProject });
+      toast(enabled ? 'Gmail import is on' : 'Gmail import is off');
+    } catch (e) {
+      failed(e);
     }
   }
 
@@ -120,6 +136,33 @@
   });
 </script>
 
+{#snippet pasteBack()}
+  <ol class="steps">
+    <li>
+      In the Google tab, choose your account and allow access. If Google says the app isn't verified, click
+      <strong>Advanced → Go to Kanban</strong>. (Tab didn't open?
+      <a href={authUrl} target="_blank" rel="noopener noreferrer">Open Google</a>.)
+    </li>
+    <li>
+      Google then sends the tab to <code class="mono">{s?.redirect_uri}…</code>, which <strong>won't load</strong>.
+      That's expected.
+    </li>
+    <li>Copy the whole address from that tab's address bar and paste it here:</li>
+  </ol>
+  <form class="paste" onsubmit={finish}>
+    <input
+      class="input mono"
+      placeholder="http://127.0.0.1:8642/?state=…&code=…"
+      bind:value={pasted}
+      use:autofocus
+      spellcheck="false"
+      autocomplete="off"
+    />
+    <button class="btn primary" disabled={busy || !pasted.trim()}>{busy ? 'Connecting…' : 'Finish'}</button>
+    <button type="button" class="btn" onclick={() => (step = 'idle')}>Cancel</button>
+  </form>
+{/snippet}
+
 <section class="panel">
   <h2>Google</h2>
 
@@ -136,32 +179,9 @@
         Connect your own Google account to see your calendars in the Calendar view and to put your tasks on a
         Google calendar when you press <strong>Push to Google</strong>. Nothing is written to Google until you do.
       </p>
-      <button class="btn primary" disabled={busy} onclick={connect}>Connect Google</button>
+      <button class="btn primary" disabled={busy} onclick={() => connect()}>Connect Google</button>
     {:else}
-      <ol class="steps">
-        <li>
-          In the Google tab, choose your account and allow access. If Google says the app isn't verified, click
-          <strong>Advanced → Go to Kanban</strong>. (Tab didn't open?
-          <a href={authUrl} target="_blank" rel="noopener noreferrer">Open Google</a>.)
-        </li>
-        <li>
-          Google then sends the tab to <code class="mono">{s.redirect_uri}…</code>, which <strong>won't load</strong>.
-          That's expected.
-        </li>
-        <li>Copy the whole address from that tab's address bar and paste it here:</li>
-      </ol>
-      <form class="paste" onsubmit={finish}>
-        <input
-          class="input mono"
-          placeholder="http://127.0.0.1:8642/?state=…&code=…"
-          bind:value={pasted}
-          use:autofocus
-          spellcheck="false"
-          autocomplete="off"
-        />
-        <button class="btn primary" disabled={busy || !pasted.trim()}>{busy ? 'Connecting…' : 'Finish'}</button>
-        <button type="button" class="btn" onclick={() => (step = 'idle')}>Cancel</button>
-      </form>
+      {@render pasteBack()}
     {/if}
   {:else}
     <div class="account">
@@ -169,10 +189,14 @@
       <button class="btn danger" onclick={disconnect}>Disconnect</button>
     </div>
 
+    {#if step === 'waiting'}
+      {@render pasteBack()}
+    {/if}
+
     {#if s.last_error}
       <p class="error" role="alert">{s.last_error}</p>
       {#if s.last_error.includes('Reconnect')}
-        <button class="btn primary" onclick={connect}>Reconnect</button>
+        <button class="btn primary" onclick={() => connect(s.features)}>Reconnect</button>
       {/if}
     {/if}
 
@@ -221,6 +245,48 @@
         {saving ? 'Saving…' : 'Save calendars'}
       </button>
     {/if}
+
+    <div class="feature">
+      <h3 class="label">Gmail → tasks</h3>
+      <p class="hint">
+        Label an email thread <strong>Kanban</strong> in Gmail, on your phone too, and it becomes a task here, assigned to
+        you, with a link back to the email. Afterwards the label changes to <strong>Kanban/Imported</strong>.
+      </p>
+      {#if !s.features.includes('gmail')}
+        <button class="btn" disabled={busy || step === 'waiting'} onclick={() => connect(['gmail'])}>Allow Gmail access</button>
+        <p class="hint small">Google asks again, with one more permission: to read and relabel your email.</p>
+      {:else}
+        <div class="row">
+          <label class="check">
+            <input type="checkbox" checked={s.gmail_enabled} onchange={(e) => setGmail(e.currentTarget.checked)} />
+            Import into
+          </label>
+          <select
+            class="input"
+            aria-label="Project for emails"
+            bind:value={gmailProject}
+            onchange={() => s.gmail_enabled && setGmail(true)}
+          >
+            {#each workspace.projects as p (p.id)}
+              <option value={p.id}>{p.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+    </div>
+
+    <div class="feature">
+      <h3 class="label">Drive file names</h3>
+      {#if s.features.includes('drive')}
+        <p class="hint">On: links to Docs, Sheets and Drive files show the file's real name.</p>
+      {:else}
+        <p class="hint">
+          Links to Docs, Sheets and Drive files work already. With read-only access to file names, they show the real
+          name instead of “Google Doc”.
+        </p>
+        <button class="btn" disabled={busy || step === 'waiting'} onclick={() => connect(['drive'])}>Show file names</button>
+      {/if}
+    </div>
 
     <div class="sync">
       <div>
@@ -339,6 +405,39 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
+  }
+
+  .feature {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .feature h3 {
+    margin: 0 0 6px;
+    font-weight: 400;
+  }
+
+  .feature .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .feature .check {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .feature select {
+    width: auto;
+  }
+
+  .small {
+    margin-top: 6px;
+    font-size: 0.75rem;
   }
 
   .sync {

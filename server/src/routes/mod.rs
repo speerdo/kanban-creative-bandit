@@ -4,7 +4,10 @@
 pub mod activity;
 mod calendar;
 mod comments;
+mod import;
 mod labels;
+pub mod links;
+mod lists;
 mod projects;
 mod statuses;
 pub mod tasks;
@@ -27,6 +30,9 @@ pub fn router() -> Router<AppState> {
         .merge(calendar::router())
         .merge(comments::router())
         .merge(labels::router())
+        .merge(links::router())
+        .merge(lists::router())
+        .merge(import::router())
         .merge(projects::router())
         .merge(statuses::router())
         .merge(tasks::router())

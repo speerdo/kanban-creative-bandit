@@ -26,6 +26,25 @@
     }
   }
 
+  let addingList = $state(false);
+  let listName = $state('');
+
+  async function createList(e: SubmitEvent) {
+    e.preventDefault();
+    if (!listName.trim()) return;
+    try {
+      const l = await api.createList({ name: listName, color: 'green' });
+      if (!workspace.lists.some((x) => x.id === l.id)) workspace.lists.push(l);
+      listName = '';
+      addingList = false;
+      go({ name: 'list', id: l.id });
+    } catch (err) {
+      failed(err);
+    }
+  }
+
+  const currentList = $derived(router.route.name === 'list' ? router.route.id : null);
+
   async function logout() {
     await api.logout().catch(() => {});
     session.me = null;
@@ -79,6 +98,33 @@
     </form>
   {:else}
     <button class="new" onclick={() => (adding = true)}>＋ New project</button>
+  {/if}
+
+  <h3>Lists</h3>
+  <ul>
+    {#each workspace.lists as l (l.id)}
+      <li>
+        <a href="#/l/{l.id}" class:active={l.id === currentList} aria-current={l.id === currentList ? 'page' : undefined}>
+          <span class="dot round" style:background={solid(l.color)}></span>
+          <span class="name">{l.name}</span>
+          {#if l.open_count}<span class="badge mono">{l.open_count}</span>{/if}
+        </a>
+      </li>
+    {/each}
+  </ul>
+  {#if addingList}
+    <form onsubmit={createList}>
+      <input
+        class="input"
+        placeholder="List name, e.g. Groceries"
+        bind:value={listName}
+        use:autofocus
+        onkeydown={(e) => e.key === 'Escape' && (addingList = false)}
+        onblur={() => !listName.trim() && (addingList = false)}
+      />
+    </form>
+  {:else}
+    <button class="new" onclick={() => (addingList = true)}>＋ New list</button>
   {/if}
 
   <div class="me">
@@ -196,6 +242,16 @@
     width: 10px;
     height: 10px;
     border-radius: 3px;
+  }
+
+  .dot.round {
+    border-radius: 50%;
+  }
+
+  .badge {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--text-muted);
   }
 
   .name {

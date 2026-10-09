@@ -168,8 +168,8 @@ gmail_imports
   user_id, thread_id, task_id→tasks, imported_at   PK (user_id, thread_id)
 ```
 
-`task_events.synced_at` vs `tasks.updated_at` tells which tasks have changes waiting for the
-next **Push to Google**.
+`task_events.pushed_summary` / `pushed_date` (what Google has) vs the task's current title, completion
+and due date tells which tasks have changes waiting for the next **Push to Google**.
 
 ### Shared lists (M7)
 

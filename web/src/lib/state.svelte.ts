@@ -1,10 +1,14 @@
 // App-wide state: who's signed in, the people and projects, toasts, and the current route.
 
-import { api, ApiError, type Label, type Me, type Project, type User } from './api';
+import { api, ApiError, type Label, type Me, type Project, type ShoppingList, type User } from './api';
 
 export const session = $state<{ me: Me | null; checked: boolean }>({ me: null, checked: false });
 export const people = $state<{ users: User[] }>({ users: [] });
-export const workspace = $state<{ projects: Project[]; labels: Label[] }>({ projects: [], labels: [] });
+export const workspace = $state<{ projects: Project[]; labels: Label[]; lists: ShoppingList[] }>({
+  projects: [],
+  labels: [],
+  lists: [],
+});
 
 export function userById(id: number | null | undefined): User | undefined {
   return id == null ? undefined : people.users.find((u) => u.id === id);
@@ -15,10 +19,11 @@ export function labelById(id: number): Label | undefined {
 }
 
 export async function loadWorkspace() {
-  const [users, projects, labels] = await Promise.all([api.users(), api.projects(), api.labels()]);
+  const [users, projects, labels, lists] = await Promise.all([api.users(), api.projects(), api.labels(), api.lists()]);
   people.users = users;
   workspace.projects = projects;
   workspace.labels = labels;
+  workspace.lists = lists;
 }
 
 /** Labels by name for quick add; unknown names are created (shared, so both of us get them). */
@@ -65,6 +70,7 @@ export function failed(e: unknown): false {
 //   #/p/3  #/p/3/board     a project (no view = the user's default view)
 //   #/my                   My Tasks
 //   #/calendar             Calendar
+//   #/l/2                  a shared list
 //   #/settings
 //   …/t/42                 on a project, My Tasks or Calendar: task 42 open in the detail panel
 
@@ -74,6 +80,7 @@ export type Route =
   | { name: 'settings' }
   | { name: 'my'; taskId?: number }
   | { name: 'calendar'; taskId?: number }
+  | { name: 'list'; id: number }
   | { name: 'project'; id: number; view?: View; taskId?: number };
 
 function parse(hash: string): Route {
@@ -82,6 +89,10 @@ function parse(hash: string): Route {
   const taskId = task ? Number(task[1]) : undefined;
   if (hash.startsWith('#/my')) return { name: 'my', taskId };
   if (hash.startsWith('#/calendar')) return { name: 'calendar', taskId };
+  // `#/lists` (the home-screen start page) means "the list I had open last".
+  if (hash.startsWith('#/lists')) return { name: 'list', id: 0 };
+  const list = /^#\/l\/(\d+)/.exec(hash);
+  if (list) return { name: 'list', id: Number(list[1]) };
   const m = /^#\/p\/(\d+)(?:\/(list|board))?/.exec(hash);
   if (!m) return { name: 'home' };
   return { name: 'project', id: Number(m[1]), view: m[2] as View | undefined, taskId };
@@ -98,6 +109,8 @@ function format(route: Route): string {
       return `#/my${t}`;
     case 'calendar':
       return `#/calendar${t}`;
+    case 'list':
+      return `#/l/${route.id}`;
     case 'project':
       return `#/p/${route.id}${route.view ? `/${route.view}` : t ? `/${defaultView()}` : ''}${t}`;
   }

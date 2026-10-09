@@ -297,6 +297,45 @@ async fn create(
     Ok((StatusCode::CREATED, Json(task)))
 }
 
+/// A new top-level task at the end of a project's first column, for imports (Gmail, Keep).
+/// Over-long titles are cut rather than refused, since nobody is there to fix them.
+pub async fn insert(
+    conn: &mut SqliteConnection,
+    project_id: i64,
+    title: &str,
+    description: &str,
+    assignee_id: Option<i64>,
+    by: i64,
+) -> AppResult<Task> {
+    let mut title: String = title.trim().chars().take(MAX_TITLE).collect();
+    if title.is_empty() {
+        title = "(untitled)".into();
+    }
+    let status = first_status(conn, project_id, None).await?;
+    let position = order(status.id, None)
+        .key(conn, Placement::default(), None)
+        .await?;
+    let sql = sqlx::AssertSqlSafe(format!(
+        "INSERT INTO tasks (project_id, status_id, title, description, assignee_id, position,
+             completed_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN {NOW} END, ?)
+         RETURNING id"
+    ));
+    let id: i64 = sqlx::query_scalar(sql)
+        .bind(project_id)
+        .bind(status.id)
+        .bind(&title)
+        .bind(description.trim())
+        .bind(assignee_id)
+        .bind(position)
+        .bind(&status.category)
+        .bind(by)
+        .fetch_one(&mut *conn)
+        .await?;
+    activity::record(conn, id, by, "created", None, None).await?;
+    fetch(conn, id).await
+}
+
 // ---- update -----------------------------------------------------------------------------
 
 #[derive(Deserialize)]

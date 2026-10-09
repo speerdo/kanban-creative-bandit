@@ -97,6 +97,62 @@ export type Activity = {
 
 export type Placement = { after_id?: number; before_id?: number };
 
+// ---- Lists and links (server/src/routes/lists.rs, links.rs) ----------------------------------
+
+export type ShoppingList = {
+  id: number;
+  name: string;
+  color: string;
+  position: string;
+  created_by: number | null;
+  created_at: string;
+  open_count: number;
+};
+
+export type ListItem = {
+  id: number;
+  list_id: number;
+  text: string;
+  note: string;
+  position: string;
+  checked_at: string | null;
+  checked_by: number | null;
+  created_by: number | null;
+  created_at: string;
+};
+
+export type LinkKind = 'gmail' | 'doc' | 'sheet' | 'slides' | 'form' | 'drive' | 'url';
+
+export type TaskLink = {
+  id: number;
+  task_id: number;
+  kind: LinkKind;
+  external_id: string | null;
+  url: string;
+  title: string | null;
+  mime_type: string | null;
+  added_by: number | null;
+  created_at: string;
+};
+
+/** A Keep note from a Takeout export, as sent to the import. */
+export type KeepNote = {
+  title: string;
+  text: string;
+  items: { text: string; checked: boolean }[] | null;
+  archived: boolean;
+  trashed: boolean;
+};
+
+export type KeepReport = {
+  lists: { name: string; items: number; merged: boolean }[];
+  tasks: string[];
+  skipped: number;
+  dry_run: boolean;
+};
+
+export type GoogleFeature = 'gmail' | 'drive';
+
 // ---- Google (server/src/google) ---------------------------------------------------------------
 
 export type ChosenCalendar = {
@@ -120,6 +176,10 @@ export type GoogleStatus = {
   /** Changes the next Push to Google would send. */
   pending: number;
   redirect_uri: string;
+  /** Optional access granted. */
+  features: GoogleFeature[];
+  gmail_enabled: boolean;
+  gmail_project_id: number | null;
 };
 
 export type CalendarOption = {
@@ -263,7 +323,10 @@ export const api = {
     get<{ tasks: Task[]; events: OverlayEvent[] }>(`/calendar${qs({ from, to })}`),
 
   google: () => get<GoogleStatus>('/integrations/google'),
-  googleStart: () => request<{ auth_url: string }>('POST', '/integrations/google/start'),
+  googleStart: (features: GoogleFeature[] = []) =>
+    request<{ auth_url: string }>('POST', '/integrations/google/start', { features }),
+  googleGmail: (g: { enabled: boolean; project_id?: number | null }) =>
+    request<GoogleStatus>('PUT', '/integrations/google/gmail', g),
   googleFinish: (redirected_url: string) =>
     request<GoogleStatus>('POST', '/integrations/google/finish', { redirected_url }),
   googleDisconnect: () => request<void>('DELETE', '/integrations/google'),
@@ -273,6 +336,26 @@ export const api = {
   googleSync: () => request<{ status: GoogleStatus }>('POST', '/integrations/google/sync'),
   googlePending: () => get<{ pending: number }>('/integrations/google/push'),
   googlePush: () => request<{ report: PushReport; status: GoogleStatus }>('POST', '/integrations/google/push'),
+
+  lists: () => get<ShoppingList[]>('/lists'),
+  createList: (l: { name: string; color?: string }) => request<ShoppingList>('POST', '/lists', l),
+  updateList: (id: number, l: { name?: string; color?: string } & Placement) =>
+    request<ShoppingList>('PATCH', `/lists/${id}`, l),
+  deleteList: (id: number) => request<void>('DELETE', `/lists/${id}`),
+  listItems: (id: number) => get<ListItem[]>(`/lists/${id}/items`),
+  addListItems: (id: number, text: string) => request<ListItem[]>('POST', `/lists/${id}/items`, { text }),
+  updateListItem: (id: number, p: { text?: string; note?: string; checked?: boolean } & Placement) =>
+    request<ListItem>('PATCH', `/list-items/${id}`, p),
+  deleteListItem: (id: number) => request<void>('DELETE', `/list-items/${id}`),
+  clearChecked: (id: number) => request<{ removed: number }>('POST', `/lists/${id}/clear-checked`),
+
+  links: (taskId: number) => get<TaskLink[]>(`/tasks/${taskId}/links`),
+  addLink: (taskId: number, url: string, title?: string) =>
+    request<TaskLink>('POST', `/tasks/${taskId}/links`, { url, title }),
+  deleteLink: (taskId: number, id: number) => request<void>('DELETE', `/tasks/${taskId}/links/${id}`),
+
+  importKeep: (b: { notes: KeepNote[]; project_id: number | null; include_archived: boolean; dry_run: boolean }) =>
+    request<KeepReport>('POST', '/import/keep', b),
 
   comments: (taskId: number) => get<Comment[]>(`/tasks/${taskId}/comments`),
   createComment: (taskId: number, body: string) => request<Comment>('POST', `/tasks/${taskId}/comments`, { body }),

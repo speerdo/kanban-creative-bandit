@@ -57,6 +57,19 @@ struct World {
     events: HashMap<String, Vec<FakeEvent>>,
     revoked: bool,
     refreshes: u32,
+    /// Scopes granted beyond calendar, as the consent screen would after "Allow".
+    extra_scopes: String,
+    labels: Vec<(String, String)>,
+    threads: Vec<FakeThread>,
+}
+
+#[derive(Clone, Debug)]
+struct FakeThread {
+    id: String,
+    labels: Vec<String>,
+    subject: String,
+    from: String,
+    snippet: String,
 }
 
 impl World {
@@ -84,6 +97,14 @@ impl Fake {
             .route("/revoke", post(revoke))
             .route("/cal/users/me/calendarList", get(calendar_list))
             .route("/cal/calendars", post(create_calendar))
+            .route(
+                "/gmail/users/me/labels",
+                get(gmail_labels).post(gmail_create_label),
+            )
+            .route("/gmail/users/me/threads", get(gmail_threads))
+            .route("/gmail/users/me/threads/{id}", get(gmail_thread))
+            .route("/gmail/users/me/threads/{id}/modify", post(gmail_modify))
+            .route("/drive/files/{id}", get(drive_file))
             .route(
                 "/cal/calendars/{cal}/events",
                 get(list_events).post(insert_event),
@@ -178,7 +199,7 @@ async fn token(State(fake): State<Fake>, Form(form): Form<HashMap<String, String
                 "access_token": "access-1",
                 "expires_in": 3599,
                 "refresh_token": "refresh-secret-1",
-                "scope": "openid https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email",
+                "scope": format!("openid https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email{}", w.extra_scopes),
                 "id_token": id_token(),
             }))
             .into_response()
@@ -345,6 +366,125 @@ async fn delete_event(
             StatusCode::NO_CONTENT
         }
         None => StatusCode::NOT_FOUND,
+    }
+}
+
+async fn gmail_labels(State(fake): State<Fake>, headers: HeaderMap) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let w = fake.0.lock().unwrap();
+    let labels: Vec<Value> = w
+        .labels
+        .iter()
+        .map(|(id, name)| json!({ "id": id, "name": name }))
+        .collect();
+    Json(json!({ "labels": labels })).into_response()
+}
+
+async fn gmail_create_label(
+    State(fake): State<Fake>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let mut w = fake.0.lock().unwrap();
+    let id = format!("Label_{}", w.labels.len() + 1);
+    w.labels
+        .push((id.clone(), body["name"].as_str().unwrap().into()));
+    Json(json!({ "id": id })).into_response()
+}
+
+async fn gmail_threads(
+    State(fake): State<Fake>,
+    headers: HeaderMap,
+    Query(q): Query<HashMap<String, String>>,
+) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let w = fake.0.lock().unwrap();
+    let label = q.get("labelIds").cloned().unwrap_or_default();
+    let threads: Vec<Value> = w
+        .threads
+        .iter()
+        .filter(|t| t.labels.contains(&label))
+        .map(|t| json!({ "id": t.id }))
+        .collect();
+    Json(json!({ "threads": threads })).into_response()
+}
+
+async fn gmail_thread(
+    State(fake): State<Fake>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let w = fake.0.lock().unwrap();
+    let Some(t) = w.threads.iter().find(|t| t.id == id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    Json(json!({ "id": t.id, "messages": [{
+        "snippet": t.snippet,
+        "payload": { "headers": [
+            { "name": "Subject", "value": t.subject },
+            { "name": "From", "value": t.from },
+        ]},
+    }]}))
+    .into_response()
+}
+
+async fn gmail_modify(
+    State(fake): State<Fake>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let mut w = fake.0.lock().unwrap();
+    let Some(t) = w.threads.iter_mut().find(|t| t.id == id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let ids = |k: &str| -> Vec<String> {
+        body[k]
+            .as_array()
+            .map(|a| a.iter().map(|v| v.as_str().unwrap().to_string()).collect())
+            .unwrap_or_default()
+    };
+    t.labels.retain(|l| !ids("removeLabelIds").contains(l));
+    t.labels.extend(ids("addLabelIds"));
+    Json(json!({ "id": id })).into_response()
+}
+
+async fn drive_file(
+    State(fake): State<Fake>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if !authorized(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    if !fake
+        .0
+        .lock()
+        .unwrap()
+        .extra_scopes
+        .contains("drive.metadata")
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match id.as_str() {
+        "DOC1" => Json(
+            json!({ "name": "Q4 budget", "mimeType": "application/vnd.google-apps.spreadsheet" }),
+        )
+        .into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -736,4 +876,221 @@ async fn revoked_access_is_reported_and_disconnect_cleans_up() {
 
 fn c2_forget_token(c: &Client, user: i64) {
     c.google.forget_access_token(user);
+}
+
+/// Grants more scopes, the way "Allow Gmail access" repeats the paste-back.
+async fn grant(c: &mut Client, fake: &Fake, features: Value, scopes: &str) {
+    fake.0.lock().unwrap().extra_scopes = scopes.into();
+    let start = c
+        .ok(
+            Method::POST,
+            "/api/integrations/google/start",
+            Some(json!({ "features": features })),
+        )
+        .await;
+    let auth = reqwest::Url::parse(start["auth_url"].as_str().unwrap()).unwrap();
+    let get = |k: &str| {
+        auth.query_pairs()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.into_owned())
+            .unwrap()
+    };
+    assert_eq!(get("include_granted_scopes"), "true");
+    for f in features.as_array().unwrap() {
+        let f = f.as_str().unwrap();
+        assert!(get("scope").contains(if f == "gmail" {
+            "gmail.modify"
+        } else {
+            "drive.metadata"
+        }));
+    }
+    let pasted = format!(
+        "http://127.0.0.1:8642/?state={}&code=good-code",
+        get("state")
+    );
+    c.ok(
+        Method::POST,
+        "/api/integrations/google/finish",
+        Some(json!({ "redirected_url": pasted })),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn gmail_label_becomes_a_task_once() {
+    let (mut c, fake) = connected().await;
+    let p = c
+        .ok(
+            Method::POST,
+            "/api/projects",
+            Some(json!({ "name": "Inbox" })),
+        )
+        .await;
+    let pid = p["id"].as_i64().unwrap();
+
+    // Turning it on needs the Gmail scope first.
+    let (status, _) = c
+        .call(
+            Method::PUT,
+            "/api/integrations/google/gmail",
+            Some(json!({ "enabled": true, "project_id": pid })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    grant(
+        &mut c,
+        &fake,
+        json!(["gmail"]),
+        " https://www.googleapis.com/auth/gmail.modify",
+    )
+    .await;
+    let s = c
+        .ok(
+            Method::PUT,
+            "/api/integrations/google/gmail",
+            Some(json!({ "enabled": true, "project_id": pid })),
+        )
+        .await;
+    assert_eq!(s["features"], json!(["gmail"]));
+    assert_eq!(s["gmail_enabled"], true);
+    // The labels exist in Gmail now, so they can be applied from the phone.
+    let (kanban, imported) = {
+        let w = fake.0.lock().unwrap();
+        let id = |n: &str| {
+            w.labels
+                .iter()
+                .find(|(_, name)| name == n)
+                .unwrap()
+                .0
+                .clone()
+        };
+        (id("Kanban"), id("Kanban/Imported"))
+    };
+
+    fake.0.lock().unwrap().threads = vec![FakeThread {
+        id: "thread123abc".into(),
+        labels: vec!["INBOX".into(), kanban.clone()],
+        subject: "Quote for the fence".into(),
+        from: "Bob Builder <bob@example.com>".into(),
+        snippet: "Here&#39;s the quote we discussed".into(),
+    }];
+    let r = c
+        .ok(Method::POST, "/api/integrations/google/sync", None)
+        .await;
+    assert_eq!(r["report"]["emails_imported"], 1);
+
+    let tasks = c
+        .ok(Method::GET, &format!("/api/tasks?project={pid}"), None)
+        .await;
+    let t = &tasks[0];
+    assert_eq!(t["title"], "Quote for the fence");
+    assert_eq!(t["assignee_id"], 1);
+    let d = t["description"].as_str().unwrap();
+    assert!(d.contains("Bob Builder ‹bob@example.com›"), "{d}");
+    assert!(d.contains("Here's the quote"), "{d}");
+    assert!(d.contains("#all/thread123abc"), "{d}");
+    let links = c
+        .ok(Method::GET, &format!("/api/tasks/{}/links", t["id"]), None)
+        .await;
+    assert_eq!(links[0]["kind"], "gmail");
+    assert_eq!(links[0]["external_id"], "thread123abc");
+
+    // The label was swapped, so Gmail shows it's done.
+    let labels = fake.0.lock().unwrap().threads[0].labels.clone();
+    assert!(
+        labels.contains(&imported) && !labels.contains(&kanban),
+        "{labels:?}"
+    );
+
+    // Labelled again later: no second task.
+    fake.0.lock().unwrap().threads[0]
+        .labels
+        .push(kanban.clone());
+    let r = c
+        .ok(Method::POST, "/api/integrations/google/sync", None)
+        .await;
+    assert_eq!(r["report"]["emails_imported"], 0);
+    let tasks = c
+        .ok(Method::GET, &format!("/api/tasks?project={pid}"), None)
+        .await;
+    assert_eq!(tasks.as_array().unwrap().len(), 1);
+    assert!(!fake.0.lock().unwrap().threads[0].labels.contains(&kanban));
+
+    // Off means off.
+    c.ok(
+        Method::PUT,
+        "/api/integrations/google/gmail",
+        Some(json!({ "enabled": false })),
+    )
+    .await;
+    fake.0.lock().unwrap().threads.push(FakeThread {
+        id: "thread456def".into(),
+        labels: vec![kanban],
+        subject: "Another".into(),
+        from: String::new(),
+        snippet: String::new(),
+    });
+    let r = c
+        .ok(Method::POST, "/api/integrations/google/sync", None)
+        .await;
+    assert_eq!(r["report"]["emails_imported"], 0);
+}
+
+#[tokio::test]
+async fn drive_links_get_real_names_once_allowed() {
+    let (mut c, fake) = connected().await;
+    let p = c
+        .ok(
+            Method::POST,
+            "/api/projects",
+            Some(json!({ "name": "Studio" })),
+        )
+        .await;
+    let t = task(&mut c, json!({ "project_id": p["id"], "title": "Budget" })).await;
+    let add = |url: &str| json!({ "url": url });
+    let url = "https://docs.google.com/spreadsheets/d/DOC1/edit#gid=0";
+
+    // Without Drive access: the kind from the URL, no name.
+    let l = c
+        .ok(
+            Method::POST,
+            &format!("/api/tasks/{t}/links"),
+            Some(add(url)),
+        )
+        .await;
+    assert_eq!(
+        (l["kind"].as_str(), l["title"].as_str()),
+        (Some("sheet"), None)
+    );
+
+    grant(
+        &mut c,
+        &fake,
+        json!(["drive"]),
+        " https://www.googleapis.com/auth/drive.metadata.readonly",
+    )
+    .await;
+    let l = c
+        .ok(
+            Method::POST,
+            &format!("/api/tasks/{t}/links"),
+            Some(add(url)),
+        )
+        .await;
+    assert_eq!(l["title"], "Q4 budget");
+    assert_eq!(l["mime_type"], "application/vnd.google-apps.spreadsheet");
+    // A file Google won't show us still links fine.
+    let l = c
+        .ok(
+            Method::POST,
+            &format!("/api/tasks/{t}/links"),
+            Some(add("https://drive.google.com/file/d/SECRET/view")),
+        )
+        .await;
+    assert_eq!(
+        (l["kind"].as_str(), l["title"].as_str()),
+        (Some("drive"), None)
+    );
+    let s = c.ok(Method::GET, "/api/integrations/google", None).await;
+    assert_eq!(s["features"], json!(["drive"]));
 }

@@ -8,6 +8,7 @@
   import Avatar from './Avatar.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
   import GoogleSettings from './GoogleSettings.svelte';
+  import KeepImport from './KeepImport.svelte';
   import StatusPill from './StatusPill.svelte';
 
   const prefs = $derived(session.me!.prefs);
@@ -202,6 +203,8 @@
     </section>
 
     <GoogleSettings />
+
+    <KeepImport />
 
     <section class="panel">
       <h2>Profile</h2>

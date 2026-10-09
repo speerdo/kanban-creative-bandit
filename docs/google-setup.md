@@ -89,10 +89,25 @@ In the app: **Settings → Google → Connect Google**.
 To disconnect, use **Settings → Google → Disconnect**. It revokes access at Google too. You can
 also remove access at any time from <https://myaccount.google.com/permissions>.
 
+## Gmail and Drive (optional, each person)
+
+Both are off until you turn them on in **Settings → Google**. Each one repeats the paste-back once,
+because Google asks for one more permission:
+
+- **Allow Gmail access**, then tick **Import into** and pick a project. The app creates two Gmail labels,
+  **Kanban** and **Kanban/Imported**. Put **Kanban** on any email thread, including from the Gmail app on
+  your phone, and within 15 minutes, or right away with ↻ Sync now, it becomes a task assigned to you
+  with a link back to the email. The label then switches to **Kanban/Imported**. The same thread is never
+  imported twice.
+- **Show file names** gives the app read-only access to Drive file *names*, not their contents. Links to
+  Docs, Sheets and Drive files then show the real name. The links work without this too.
+
 ## Keep import (optional)
 
 Shared grocery and household lists live in the app's **Lists**. To seed them from Keep (there's no
 API for personal accounts, so this uses a file):
 
 1. Go to <https://takeout.google.com/>, click **Deselect all**, check **Keep**, and export.
-2. In the app, open **Settings → Import → Google Keep** and upload the `.zip`.
+2. In the app, open **Settings → Import from Google Keep** and pick the `.zip`. It shows what it will
+   create before anything changes. Checklists become Lists (merged into a list with the same name),
+   and other notes become tasks in a project you pick. Archived and trashed notes are skipped.

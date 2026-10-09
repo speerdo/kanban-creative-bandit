@@ -4,6 +4,7 @@
   import { defaultView, failed, go, loadWorkspace, router, workspace } from '../state.svelte';
   import { handleShortcut } from '../shortcuts';
   import CalendarView from './CalendarView.svelte';
+  import ListPage from './ListPage.svelte';
   import MyTasks from './MyTasks.svelte';
   import ProjectView from './ProjectView.svelte';
   import Settings from './Settings.svelte';
@@ -56,6 +57,22 @@
       : null,
   );
   const currentProjectId = $derived(current?.id);
+
+  // `#/lists` opens the last list used here, or the first one.
+  const lastList = () => {
+    try {
+      return Number(localStorage.getItem('lists.last')) || 0;
+    } catch {
+      return 0;
+    }
+  };
+  const openList = $derived(
+    router.route.name === 'list'
+      ? router.route.id
+        ? workspace.lists.find((l) => l.id === (router.route as { id: number }).id)
+        : (workspace.lists.find((l) => l.id === lastList()) ?? workspace.lists[0])
+      : undefined,
+  );
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -74,6 +91,19 @@
       <MyTasks />
     {:else if router.route.name === 'calendar'}
       <CalendarView />
+    {:else if router.route.name === 'list'}
+      {#if openList}
+        {#key openList.id}
+          <ListPage list={openList} />
+        {/key}
+      {:else if workspace.lists.length === 0}
+        <div class="empty">
+          <h2>No lists yet</h2>
+          <p class="muted">Make one in the sidebar, for example Groceries.</p>
+        </div>
+      {:else}
+        <p class="muted pad">That list was deleted.</p>
+      {/if}
     {:else if current}
       {#key current.id}
         <ProjectView projectId={current.id} view={current.view ?? defaultView()} />

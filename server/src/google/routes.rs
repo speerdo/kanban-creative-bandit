@@ -10,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{oauth::REDIRECT_URI, sync};
+use super::{Feature, gmail, granted, oauth::REDIRECT_URI, sync};
 use crate::{
     AppState,
     auth::CurrentUser,
@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
             get(list_calendars).put(choose_calendars),
         )
         .route("/integrations/google/sync", post(sync_now))
+        .route("/integrations/google/gmail", axum::routing::put(set_gmail))
         .route("/integrations/google/push", get(push_count).post(push))
 }
 
@@ -52,6 +53,10 @@ struct Status {
     calendars: Vec<ChosenCalendar>,
     /// Changes the next push would send.
     pending: usize,
+    /// Optional scopes granted: `gmail`, `drive`.
+    features: Vec<Feature>,
+    gmail_enabled: bool,
+    gmail_project_id: Option<i64>,
     redirect_uri: &'static str,
 }
 
@@ -62,11 +67,14 @@ struct Account {
     last_sync_at: Option<String>,
     last_push_at: Option<String>,
     last_error: Option<String>,
+    gmail_enabled: bool,
+    gmail_project_id: Option<i64>,
 }
 
 async fn current(state: &AppState, user: i64) -> AppResult<Status> {
     let account: Option<Account> = sqlx::query_as(
-        "SELECT email, connected_at, last_sync_at, last_push_at, last_error
+        "SELECT email, connected_at, last_sync_at, last_push_at, last_error, gmail_enabled,
+                gmail_project_id
          FROM google_accounts WHERE user_id = ?",
     )
     .bind(user)
@@ -80,6 +88,12 @@ async fn current(state: &AppState, user: i64) -> AppResult<Status> {
     .fetch_all(&state.db)
     .await?;
     let pending = sync::pending(&state.db, user).await?;
+    let mut features = vec![];
+    for f in [Feature::Gmail, Feature::Drive] {
+        if granted(&state.db, user, f).await? {
+            features.push(f);
+        }
+    }
     Ok(Status {
         configured: state.google.configured(),
         connected: account.is_some(),
@@ -87,7 +101,10 @@ async fn current(state: &AppState, user: i64) -> AppResult<Status> {
         connected_at: account.as_ref().map(|a| a.connected_at.clone()),
         last_sync_at: account.as_ref().and_then(|a| a.last_sync_at.clone()),
         last_push_at: account.as_ref().and_then(|a| a.last_push_at.clone()),
+        gmail_enabled: account.as_ref().is_some_and(|a| a.gmail_enabled),
+        gmail_project_id: account.as_ref().and_then(|a| a.gmail_project_id),
         last_error: account.and_then(|a| a.last_error),
+        features,
         calendars,
         pending,
         redirect_uri: REDIRECT_URI,
@@ -101,11 +118,19 @@ async fn status(
     Ok(Json(current(&state, me.id).await?))
 }
 
+#[derive(Deserialize, Default)]
+struct StartBody {
+    #[serde(default)]
+    features: Vec<Feature>,
+}
+
 async fn start(
     State(state): State<AppState>,
     CurrentUser(me): CurrentUser,
+    body: Option<Json<StartBody>>,
 ) -> AppResult<Json<Value>> {
-    let auth_url = state.google.start(me.id)?;
+    let features = body.map(|b| b.0.features).unwrap_or_default();
+    let auth_url = state.google.start(me.id, &features)?;
     Ok(Json(json!({ "auth_url": auth_url })))
 }
 
@@ -290,6 +315,38 @@ async fn choose_calendars(
     if let Err(e) = sync::pull(&state, me.id).await {
         tracing::warn!(user = me.id, "Google pull after choosing calendars: {e}");
     }
+    Ok(Json(current(&state, me.id).await?))
+}
+
+#[derive(Deserialize)]
+struct GmailBody {
+    enabled: bool,
+    project_id: Option<i64>,
+}
+
+async fn set_gmail(
+    State(state): State<AppState>,
+    CurrentUser(me): CurrentUser,
+    Json(body): Json<GmailBody>,
+) -> AppResult<Json<Status>> {
+    if body.enabled {
+        let project = body
+            .project_id
+            .ok_or_else(|| AppError::bad("choose the project emails go to"))?;
+        let ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM projects WHERE id = ? AND archived = 0)",
+        )
+        .bind(project)
+        .fetch_one(&state.db)
+        .await?;
+        if !ok {
+            return Err(AppError::bad("that project doesn't exist"));
+        }
+    }
+    if body.enabled && !granted(&state.db, me.id, Feature::Gmail).await? {
+        return Err(AppError::Conflict("Allow Gmail access first.".into()));
+    }
+    gmail::configure(&state, me.id, body.enabled, body.project_id).await?;
     Ok(Json(current(&state, me.id).await?))
 }
 
