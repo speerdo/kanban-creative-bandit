@@ -6,10 +6,10 @@ and per-user custom colors, plus a calendar that syncs with Google Calendar and
 Gmail/Drive/Keep hooks. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
-> **Status:** M4 (depth): list and board views with drag and drop and live sync; a task detail panel
-> with markdown description, subtasks, labels, comments and history; My Tasks; filters and search;
-> keyboard shortcuts (press `?`); per-user themes. Next up: M5 (backups and ops polish), then Google
-> Calendar (M6) and Gmail, Drive and shared Lists (M7).
+> **Status:** M5 (ops polish): list and board views with drag and drop and live sync; a task detail
+> panel with markdown, subtasks, labels, comments and history; My Tasks; filters, search and keyboard
+> shortcuts (press `?`); per-user themes; nightly backups and one-command restore. Next up: Google
+> Calendar (M6), then Gmail, Drive and shared Lists (M7).
 
 ## Quick start
 
@@ -45,7 +45,9 @@ Then create the accounts against the live database:
 sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db /usr/local/bin/kanban user add adam "Adam"
 ```
 
-Upgrade: `git pull && make install`. Logs: `journalctl -u kanban -f`.
+Upgrade: `git pull && make install` (backs up the database first). Logs: `journalctl -u kanban -f`.
+Backups run nightly. Restore: `kanban restore <file>` with the service stopped. See the
+[operations runbook](docs/operations.md).
 
 ## At a glance
 
@@ -61,6 +63,7 @@ Upgrade: `git pull && make install`. Logs: `journalctl -u kanban -f`.
 
 - [Blueprint](docs/blueprint.md): what we're building and how
 - [Hosting on the home server](docs/hosting.md): running alongside the trading bot
+- [Operations runbook](docs/operations.md): upgrades, backups and restore, logs, troubleshooting
 - [ADR 0001: Tech stack](docs/adr/0001-tech-stack.md)
 - [ADR 0002: Google integration](docs/adr/0002-google-integration.md) and [Google setup](docs/google-setup.md)
 

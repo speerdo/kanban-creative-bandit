@@ -4,6 +4,7 @@
 |---|---|
 | [blueprint.md](blueprint.md) | Product scope, architecture, data model, API, UI/UX, theming, roadmap |
 | [google-setup.md](google-setup.md) | One-time Google Cloud project + OAuth client setup, and how each of us connects |
+| [operations.md](operations.md) | Runbook: install, upgrade and rollback, health, logs, backups and restore, troubleshooting, remote access |
 | [hosting.md](hosting.md) | How it runs on the home server next to the trading bot: ports, firewall, resource limits, backups |
 | [adr/](adr/) | Architecture Decision Records. One file per significant decision, numbered, never rewritten (supersede instead) |
 

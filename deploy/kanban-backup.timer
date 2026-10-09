@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly kanban backup
+
+[Timer]
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=15m
+# If the machine was off at 03:30, back up soon after it boots.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

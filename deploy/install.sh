@@ -23,10 +23,21 @@ if ! id kanban &>/dev/null; then
   echo "Created system user 'kanban'."
 fi
 
+# Back up the live database before replacing the binary (new versions may migrate it).
+if [[ -f /var/lib/kanban/kanban.db && -x /usr/local/bin/kanban ]]; then
+  install -d -o kanban -g kanban -m 0750 /var/lib/kanban/backups
+  sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db \
+    /usr/local/bin/kanban backup /var/lib/kanban/backups/pre-upgrade.db >/dev/null
+  echo "Saved /var/lib/kanban/backups/pre-upgrade.db"
+fi
+
 install -m 0755 "$BIN_SRC" /usr/local/bin/kanban
-install -m 0644 "$SCRIPT_DIR/kanban.service" /etc/systemd/system/kanban.service
+for unit in kanban.service kanban-backup.service kanban-backup.timer; do
+  install -m 0644 "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"
+done
 systemctl daemon-reload
 systemctl enable kanban.service >/dev/null
+systemctl enable --now kanban-backup.timer >/dev/null
 systemctl restart kanban.service
 
 if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
@@ -39,6 +50,11 @@ fi
 sleep 1
 if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null; then
   echo "kanban is running: http://$(hostname -I | awk '{print $1}'):$PORT"
+  echo "Nightly backups: $(systemctl list-timers kanban-backup.timer --no-legend | awk '{print "next run " $1, $2, $3}')"
+  if ! sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db /usr/local/bin/kanban user list | grep -q .; then
+    echo "No accounts yet. Create them with:"
+    echo "  sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db kanban user add adam \"Adam\""
+  fi
 else
   echo "Service did not respond. Check: journalctl -u kanban -n 50" >&2
   exit 1

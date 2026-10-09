@@ -1,6 +1,7 @@
 mod api;
 mod assets;
 mod auth;
+mod backup;
 mod cli;
 mod config;
 mod db;
@@ -45,12 +46,17 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
-    let db = db::connect(&config.db_path).await?;
+    started();
 
-    // `kanban user …` and friends: run the command and exit instead of serving.
+    // `kanban user …` and friends: run the command and exit instead of serving. Restore runs
+    // before the database is opened, since it replaces the file.
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("restore") {
+        return cli::restore(&config, &args[1..]).await;
+    }
+    let db = db::connect(&config.db_path).await?;
     if !args.is_empty() {
-        return cli::run(&db, &args).await;
+        return cli::run(&db, &config, &args).await;
     }
     tracing::info!(path = %config.db_path.display(), "database ready");
 
@@ -76,6 +82,12 @@ async fn main() -> anyhow::Result<()> {
     db.close().await;
     tracing::info!("shut down cleanly");
     Ok(())
+}
+
+/// When the process started (for `/api/health`).
+pub fn started() -> std::time::Instant {
+    static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    *STARTED.get_or_init(std::time::Instant::now)
 }
 
 async fn purge_sessions_daily(db: SqlitePool) {

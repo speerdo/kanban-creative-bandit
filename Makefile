@@ -3,7 +3,7 @@
 CARGO := nice -n 19 ionice -c3 cargo
 JOBS  := -j 2
 
-.PHONY: help dev-server dev-web web build release check test fmt install clean
+.PHONY: help dev-server dev-web web build release check test fmt install backup clean
 
 help:
 	@echo "make dev-server  Run the Rust API on :8080 (debug)"
@@ -13,7 +13,8 @@ help:
 	@echo "make release     Frontend + optimized server binary -> target/release/kanban"
 	@echo "make check       rustfmt, clippy, svelte-check"
 	@echo "make test        Rust API tests + frontend unit tests"
-	@echo "make install     Install binary + systemd unit (uses sudo)"
+	@echo "make install     Back up, install binary + systemd units, restart (uses sudo)"
+	@echo "make backup      Back up the dev database into data/backups"
 
 dev-server:
 	$(CARGO) run $(JOBS)
@@ -49,6 +50,9 @@ fmt:
 
 install: release
 	sudo deploy/install.sh target/release/kanban
+
+backup:
+	$(CARGO) run $(JOBS) -- backup --dir data/backups
 
 clean:
 	cargo clean

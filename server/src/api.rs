@@ -26,10 +26,19 @@ async fn health(State(state): State<AppState>) -> Response {
     } else {
         StatusCode::SERVICE_UNAVAILABLE
     };
+    // Size from SQLite itself, so it's right whatever the file layout.
+    let db_bytes: Option<i64> = sqlx::query_scalar(
+        "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+    )
+    .fetch_one(&state.db)
+    .await
+    .ok();
     let body = json!({
         "status": if db_ok { "ok" } else { "degraded" },
         "version": env!("CARGO_PKG_VERSION"),
         "db": if db_ok { "ok" } else { "error" },
+        "db_bytes": db_bytes,
+        "uptime_seconds": crate::started().elapsed().as_secs(),
     });
     (status, Json(body)).into_response()
 }

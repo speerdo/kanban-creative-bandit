@@ -1,0 +1,24 @@
+[Unit]
+Description=Kanban nightly database backup
+# Runs `kanban backup`: a consistent VACUUM INTO copy, safe while the app is running.
+After=kanban.service
+
+[Service]
+Type=oneshot
+User=kanban
+Group=kanban
+Environment=KANBAN_DB_PATH=/var/lib/kanban/kanban.db
+ExecStart=/usr/local/bin/kanban backup --dir /var/lib/kanban/backups --keep 14
+
+# Lowest priority: the trading bot always wins (see docs/hosting.md).
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=5
+IOWeight=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/kanban

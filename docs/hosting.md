@@ -104,13 +104,10 @@ Do **not** port-forward 8080 on the router. If remote access is wanted later, us
 
 ## Backups
 
-- Nightly systemd timer runs `sqlite3 /var/lib/kanban/kanban.db ".backup '/var/lib/kanban/backups/kanban-$(date +%F).db'"`
-  (an online, consistent copy that's safe while the app runs), and keeps 14 days.
-- Optionally rsync `backups/` to another machine or cloud drive.
-- Restore: stop the service, copy the backup over `kanban.db`, then start the service.
-
-(`sqlite3` CLI isn't installed yet: `sudo apt install sqlite3`. Alternatively the binary can expose
-`kanban backup <path>` using SQLite's `VACUUM INTO`, which avoids the dependency. That's the plan for M5.)
+Built into the binary (`kanban backup`, using SQLite's `VACUUM INTO`), so the server needs no `sqlite3`
+CLI. A systemd timer takes a copy every night at about 03:30 at idle priority and keeps 14 of them.
+`make install` also saves a pre-upgrade copy. Restore is `kanban restore <file>` with the service stopped.
+Details are in [operations.md](operations.md).
 
 ## Setup and upgrades
 
