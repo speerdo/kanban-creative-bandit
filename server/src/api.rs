@@ -7,7 +7,7 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::{AppState, auth, events, prefs, routes};
+use crate::{AppState, auth, events, google, prefs, routes};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
         .merge(auth::router())
         .merge(prefs::router())
         .merge(routes::router())
+        .merge(google::router())
         .fallback(not_found)
 }
 
@@ -39,6 +40,7 @@ async fn health(State(state): State<AppState>) -> Response {
         "db": if db_ok { "ok" } else { "error" },
         "db_bytes": db_bytes,
         "uptime_seconds": crate::started().elapsed().as_secs(),
+        "google": if state.google.configured() { "on" } else { "off" },
     });
     (status, Json(body)).into_response()
 }

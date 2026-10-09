@@ -36,6 +36,7 @@ const KINDS = [
   'comment.created',
   'comment.updated',
   'comment.deleted',
+  'calendar.synced',
 ];
 
 export function connect() {

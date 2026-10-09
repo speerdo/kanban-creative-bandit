@@ -35,6 +35,18 @@ install -m 0755 "$BIN_SRC" /usr/local/bin/kanban
 for unit in kanban.service kanban-backup.service kanban-backup.timer; do
   install -m 0644 "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"
 done
+# Google: hand the token key to the service as a credential, when there is one.
+DROPIN=/etc/systemd/system/kanban.service.d/google.conf
+if [[ -f /etc/kanban/token.key ]]; then
+  if [[ "$(stat -c %s /etc/kanban/token.key)" -ne 32 ]]; then
+    echo "Warning: /etc/kanban/token.key must be exactly 32 bytes; Google stays off. See docs/google-setup.md." >&2
+  fi
+  install -d -m 0755 "$(dirname "$DROPIN")"
+  printf '[Service]\nLoadCredential=token-key:/etc/kanban/token.key\n' > "$DROPIN"
+else
+  rm -f "$DROPIN"
+fi
+
 systemctl daemon-reload
 systemctl enable kanban.service >/dev/null
 systemctl enable --now kanban-backup.timer >/dev/null
@@ -51,9 +63,14 @@ sleep 1
 if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null; then
   echo "kanban is running: http://$(hostname -I | awk '{print $1}'):$PORT"
   echo "Nightly backups: $(systemctl list-timers kanban-backup.timer --no-legend | awk '{print "next run " $1, $2, $3}')"
+  if curl -fsS "http://127.0.0.1:$PORT/api/health" | grep -q '"google":"on"'; then
+    echo "Google: on (each person connects in Settings → Google)"
+  else
+    echo "Google: off. $(journalctl -u kanban -n 30 --no-pager -o cat | grep -o 'Google integration off.*' | tail -1)"
+  fi
   if ! sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db /usr/local/bin/kanban user list | grep -q .; then
     echo "No accounts yet. Create them with:"
-    echo "  sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db kanban user add adam \"Adam\""
+    echo "  sudo -u kanban KANBAN_DB_PATH=/var/lib/kanban/kanban.db /usr/local/bin/kanban user add adam \"Adam\""
   fi
 else
   echo "Service did not respond. Check: journalctl -u kanban -n 50" >&2

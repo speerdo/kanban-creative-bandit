@@ -14,6 +14,8 @@ pub enum AppError {
     Forbidden(String),
     NotFound,
     Conflict(String),
+    /// Another service (Google) failed; the message is safe to show.
+    Upstream(String),
     Internal(anyhow::Error),
 }
 
@@ -26,7 +28,7 @@ impl AppError {
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BadRequest(m) | Self::Conflict(m) => f.write_str(m),
+            Self::BadRequest(m) | Self::Conflict(m) | Self::Upstream(m) => f.write_str(m),
             Self::Unauthorized => f.write_str("not signed in"),
             Self::Forbidden(m) => f.write_str(m),
             Self::NotFound => f.write_str("not found"),
@@ -45,6 +47,7 @@ impl IntoResponse for AppError {
             Self::Forbidden(m) => (StatusCode::FORBIDDEN, m),
             Self::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
             Self::Conflict(m) => (StatusCode::CONFLICT, m),
+            Self::Upstream(m) => (StatusCode::BAD_GATEWAY, m),
             Self::Internal(e) => {
                 tracing::error!("{e:#}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())

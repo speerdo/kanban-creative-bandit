@@ -97,6 +97,56 @@ export type Activity = {
 
 export type Placement = { after_id?: number; before_id?: number };
 
+// ---- Google (server/src/google) ---------------------------------------------------------------
+
+export type ChosenCalendar = {
+  google_calendar_id: string;
+  summary: string;
+  color: string | null;
+  role: 'tasks' | 'overlay';
+  synced_at: string | null;
+};
+
+export type GoogleStatus = {
+  /** Google is set up on the server. */
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  connected_at: string | null;
+  last_sync_at: string | null;
+  last_push_at: string | null;
+  last_error: string | null;
+  calendars: ChosenCalendar[];
+  /** Changes the next Push to Google would send. */
+  pending: number;
+  redirect_uri: string;
+};
+
+export type CalendarOption = {
+  id: string;
+  summary: string;
+  color: string | null;
+  primary: boolean;
+  writable: boolean;
+  role: 'tasks' | 'overlay' | null;
+};
+
+export type PushReport = { created: number; updated: number; deleted: number };
+
+/** A read-only event from one of my Google calendars. */
+export type OverlayEvent = {
+  google_event_id: string;
+  calendar: string;
+  color: string | null;
+  summary: string;
+  /** YYYY-MM-DD when all_day (end exclusive), else RFC 3339. */
+  start_at: string;
+  end_at: string;
+  all_day: boolean;
+  html_link: string | null;
+  location: string | null;
+};
+
 export type TaskPatch = Partial<
   Pick<Task, 'title' | 'description' | 'assignee_id' | 'priority' | 'due_date' | 'start_date' | 'status_id' | 'label_ids'>
 > & { completed?: boolean };
@@ -208,6 +258,21 @@ export const api = {
   createLabel: (l: { name: string; color?: string }) => request<Label>('POST', '/labels', l),
   updateLabel: (id: number, l: { name?: string; color?: string }) => request<Label>('PATCH', `/labels/${id}`, l),
   deleteLabel: (id: number) => request<void>('DELETE', `/labels/${id}`),
+
+  calendar: (from: string, to: string) =>
+    get<{ tasks: Task[]; events: OverlayEvent[] }>(`/calendar${qs({ from, to })}`),
+
+  google: () => get<GoogleStatus>('/integrations/google'),
+  googleStart: () => request<{ auth_url: string }>('POST', '/integrations/google/start'),
+  googleFinish: (redirected_url: string) =>
+    request<GoogleStatus>('POST', '/integrations/google/finish', { redirected_url }),
+  googleDisconnect: () => request<void>('DELETE', '/integrations/google'),
+  googleCalendars: () => get<CalendarOption[]>('/integrations/google/calendars'),
+  googleChooseCalendars: (c: { tasks: string | null; overlays: string[] }) =>
+    request<GoogleStatus>('PUT', '/integrations/google/calendars', c),
+  googleSync: () => request<{ status: GoogleStatus }>('POST', '/integrations/google/sync'),
+  googlePending: () => get<{ pending: number }>('/integrations/google/push'),
+  googlePush: () => request<{ report: PushReport; status: GoogleStatus }>('POST', '/integrations/google/push'),
 
   comments: (taskId: number) => get<Comment[]>(`/tasks/${taskId}/comments`),
   createComment: (taskId: number, body: string) => request<Comment>('POST', `/tasks/${taskId}/comments`, { body }),

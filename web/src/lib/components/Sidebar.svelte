@@ -46,6 +46,13 @@
   <a href="#/my" class="my" class:active={router.route.name === 'my'} aria-current={router.route.name === 'my' ? 'page' : undefined}>
     <span class="my-icon" aria-hidden="true">✓</span>My tasks
   </a>
+  <a
+    href="#/calendar"
+    class:active={router.route.name === 'calendar'}
+    aria-current={router.route.name === 'calendar' ? 'page' : undefined}
+  >
+    <span class="cal-icon" aria-hidden="true"></span>Calendar
+  </a>
 
   <h3>Projects</h3>
   <ul>
@@ -174,6 +181,14 @@
     border: 1.5px solid currentColor;
     font-size: 9px;
     font-weight: 700;
+  }
+
+  .cal-icon {
+    width: 16px;
+    height: 15px;
+    border: 1.5px solid currentColor;
+    border-top-width: 4px;
+    border-radius: 3px;
   }
 
   .dot {

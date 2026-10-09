@@ -11,6 +11,10 @@ ExecStart=/usr/local/bin/kanban
 Environment=KANBAN_BIND=0.0.0.0:8080
 Environment=KANBAN_DB_PATH=/var/lib/kanban/kanban.db
 Environment=RUST_LOG=info
+# Google integration (docs/google-setup.md). Optional: without it, Google features are off.
+# The token key is loaded by a drop-in that install.sh writes only when /etc/kanban/token.key
+# exists, because systemd won't start a unit whose LoadCredential file is missing.
+EnvironmentFile=-/etc/kanban/google.env
 StateDirectory=kanban
 StateDirectoryMode=0750
 Restart=on-failure

@@ -46,7 +46,7 @@ sudo systemctl start kanban
 
 ```bash
 curl -s http://127.0.0.1:8080/api/health
-# {"status":"ok","db":"ok","db_bytes":122880,"uptime_seconds":5321,"version":"0.1.0"}
+# {"status":"ok","db":"ok","db_bytes":122880,"uptime_seconds":5321,"version":"0.1.0","google":"on"}
 systemctl status kanban
 kb check                                          # SQLite integrity check
 ```
@@ -63,6 +63,19 @@ journalctl -u kanban-backup             # backup runs
 ```
 
 For more detail, add `Environment=RUST_LOG=debug` with `sudo systemctl edit kanban`, then restart.
+
+## Google Calendar
+
+Each of us connects our own Google account in **Settings → Google** (setup:
+[google-setup.md](google-setup.md)). After that:
+
+- Every 15 minutes, the server pulls our chosen Google calendars into the Calendar view. It also pulls
+  changes to the events we pushed: moving one in Google moves the task's due date, and deleting one
+  clears it.
+- Nothing goes to Google until someone presses **Push to Google**. A push sends our own dated tasks
+  to our "Kanban" calendar as all-day events.
+- Outbound only: the server calls `oauth2.googleapis.com` and `www.googleapis.com` over HTTPS.
+  Nothing new is exposed.
 
 ## Backups
 
@@ -105,6 +118,9 @@ a restore can itself be undone.
 | Changes don't appear in the other browser live | The dot next to List/Board turns grey while reconnecting. Reloading the page refetches everything. |
 | Locked out | `kb user passwd adam` (this also signs out every session) |
 | Service won't start after an upgrade | `journalctl -u kanban -n 50`, then roll back (above) |
+| Settings says Google isn't set up | `journalctl -u kanban -o cat \| grep -i google` shows why. Usually `/etc/kanban/google.env` or `token.key` is missing, or the key isn't 32 bytes. Fix it, then `make install` ([google-setup.md](google-setup.md)) |
+| "Google access was revoked. Reconnect." | Access was removed at myaccount.google.com, or the token key changed. Settings → Google → Reconnect |
+| Google calendar changes don't show up | Calendar view → ↻ (Sync now). Any error appears in red there and in Settings → Google |
 
 ## Remote access (needed before shared Lists, M7)
 

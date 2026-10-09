@@ -1,6 +1,6 @@
 # ADR 0002: Google integration
 
-- **Status:** Proposed
+- **Status:** Accepted. Calendar was built in M6; Gmail, Drive and Lists come in M7.
 - **Date:** 2026-10-09
 - **Deciders:** Adam, Kat
 
@@ -38,9 +38,9 @@ Constraints that shape the design (checked against Google's docs on 2026-10-09):
 - Create **one Google Cloud project** ("Kanban") with an OAuth client of type **Desktop app**.
   Google allows loopback redirects (`http://127.0.0.1:<port>`) for this client type, and they
   have no HTTPS requirement.
-- In Settings → Integrations, each of us clicks **Connect Google**. The app opens Google's consent
+- In Settings → Google, each of us clicks **Connect Google**. The app opens Google's consent
   page (with PKCE and a `state` value). After you approve, Google redirects your browser to
-  `http://127.0.0.1:<port>/?code=…`. Nothing listens there, so the page fails to load, but the
+  `http://127.0.0.1:8642/?code=…`. Nothing listens there, so the page fails to load, but the
   address bar holds the code. **Paste that URL back into the app**, and the server exchanges it
   for a refresh token.
 - This happens **once per person**. After that, the server refreshes access tokens by itself.
@@ -75,10 +75,16 @@ press a button.
   everything else.
 - **Overlay.** Calendars you pick (e.g. your primary calendar and a shared family calendar) are
   read into a local cache and drawn, read-only, in the app's Calendar view next to the tasks.
-- **Polling, not webhooks.** A background job pulls each calendar every **15 minutes** with an
-  incremental `events.list` and the stored `syncToken`. That's well within the "at least daily"
-  requirement, and an unchanged calendar costs one tiny request. It also runs on demand from a
-  "Sync now" button and when the Calendar view opens. A `410 Gone` response triggers a full resync.
+- **Polling, not webhooks.** A background job pulls every **15 minutes**. That's well within the
+  "at least daily" requirement. It also runs on demand from "Sync now", when the Calendar view opens
+  (if the last pull is more than 5 minutes old), and before every push.
+  - The **tasks calendar** is read incrementally with `events.list` and the stored `syncToken`. An
+    unchanged calendar costs one tiny request. A `410 Gone` response triggers a full resync.
+  - **Overlay calendars** are re-read for a window, from two months back to about a year ahead,
+    with recurring events expanded (`singleEvents`), and the cache is replaced each time.
+    *Changed during M6:* a `syncToken` can't be combined with a time window, and without a window
+    a calendar's full history and endlessly repeating events would all land in the cache. A
+    window costs one request per calendar per pull, which is nothing at our scale.
 - **Conflicts:** if a task changed in the app *and* its event changed in Google since the last push,
   the pull applies Google's date and the task shows "changed in Google". The next push then
   sends the app's title and completion. Changes we push are recognised by etag and ignored when they

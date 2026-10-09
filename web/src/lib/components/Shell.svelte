@@ -3,6 +3,7 @@
   import { active } from '../project.svelte';
   import { defaultView, failed, go, loadWorkspace, router, workspace } from '../state.svelte';
   import { handleShortcut } from '../shortcuts';
+  import CalendarView from './CalendarView.svelte';
   import MyTasks from './MyTasks.svelte';
   import ProjectView from './ProjectView.svelte';
   import Settings from './Settings.svelte';
@@ -50,7 +51,9 @@
 
   const current = $derived(router.route.name === 'project' ? router.route : undefined);
   const openTaskId = $derived(
-    (router.route.name === 'project' || router.route.name === 'my') && router.route.taskId ? router.route.taskId : null,
+    (router.route.name === 'project' || router.route.name === 'my' || router.route.name === 'calendar') && router.route.taskId
+      ? router.route.taskId
+      : null,
   );
   const currentProjectId = $derived(current?.id);
 </script>
@@ -69,6 +72,8 @@
       <Settings />
     {:else if router.route.name === 'my'}
       <MyTasks />
+    {:else if router.route.name === 'calendar'}
+      <CalendarView />
     {:else if current}
       {#key current.id}
         <ProjectView projectId={current.id} view={current.view ?? defaultView()} />

@@ -11,8 +11,12 @@ use tower::ServiceExt;
 
 use crate::{AppState, app, auth, db};
 
+mod google_sync;
+
 struct Client {
     app: Router,
+    db: sqlx::SqlitePool,
+    google: std::sync::Arc<crate::google::Google>,
     cookie: Option<String>,
     events: crate::events::Hub,
     /// Dropping this would end every event stream.
@@ -32,6 +36,11 @@ impl Drop for TempDir {
 impl Client {
     /// A new database with users `adam` and `kat` (password `password1`), signed in as adam.
     async fn new() -> Self {
+        Self::with_google(None).await
+    }
+
+    /// The same, with the Google integration configured (pointing at a stand-in server).
+    async fn with_google(google: Option<crate::google::Config>) -> Self {
         let dir = std::env::temp_dir().join(format!(
             "kanban-test-{}-{}",
             std::process::id(),
@@ -54,11 +63,15 @@ impl Client {
             .unwrap();
         }
         let (events, stop) = crate::events::Hub::new();
+        let google = std::sync::Arc::new(crate::google::Google::new(google).unwrap());
         let mut c = Self {
             app: app(AppState {
-                db: pool,
+                db: pool.clone(),
                 events: events.clone(),
+                google: google.clone(),
             }),
+            db: pool,
+            google,
             cookie: None,
             events,
             _stop: stop,

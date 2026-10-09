@@ -298,7 +298,7 @@ Everything assigned to me across all projects, grouped by **Overdue · Today · 
   removes them. Unchecking brings an item back, so regular groceries can be reused.
 - Changes appear live on the other phone (SSE). The app can be added to the home screen (web app manifest).
 
-### Settings → Integrations (M6–M7)
+### Settings → Google (M6–M7)
 
 - **Google:** shows the connect/disconnect state and the account email. Lets you pick the tasks calendar and the
   overlay calendars, and has toggles for Gmail import and Drive titles. Shows the last sync and any error in plain words

@@ -64,14 +64,16 @@ export function failed(e: unknown): false {
 //
 //   #/p/3  #/p/3/board     a project (no view = the user's default view)
 //   #/my                   My Tasks
+//   #/calendar             Calendar
 //   #/settings
-//   …/t/42                 on a project or My Tasks: task 42 open in the detail panel
+//   …/t/42                 on a project, My Tasks or Calendar: task 42 open in the detail panel
 
 export type View = 'list' | 'board';
 export type Route =
   | { name: 'home' }
   | { name: 'settings' }
   | { name: 'my'; taskId?: number }
+  | { name: 'calendar'; taskId?: number }
   | { name: 'project'; id: number; view?: View; taskId?: number };
 
 function parse(hash: string): Route {
@@ -79,6 +81,7 @@ function parse(hash: string): Route {
   const task = /\/t\/(\d+)/.exec(hash);
   const taskId = task ? Number(task[1]) : undefined;
   if (hash.startsWith('#/my')) return { name: 'my', taskId };
+  if (hash.startsWith('#/calendar')) return { name: 'calendar', taskId };
   const m = /^#\/p\/(\d+)(?:\/(list|board))?/.exec(hash);
   if (!m) return { name: 'home' };
   return { name: 'project', id: Number(m[1]), view: m[2] as View | undefined, taskId };
@@ -93,6 +96,8 @@ function format(route: Route): string {
       return '#/settings';
     case 'my':
       return `#/my${t}`;
+    case 'calendar':
+      return `#/calendar${t}`;
     case 'project':
       return `#/p/${route.id}${route.view ? `/${route.view}` : t ? `/${defaultView()}` : ''}${t}`;
   }
@@ -108,7 +113,7 @@ export function go(route: Route) {
 /** Opens (or with `null`, closes) the detail panel over the current page. */
 export function openTask(taskId: number | null) {
   const r = router.route;
-  if (r.name === 'project' || r.name === 'my') go({ ...r, taskId: taskId ?? undefined });
+  if (r.name === 'project' || r.name === 'my' || r.name === 'calendar') go({ ...r, taskId: taskId ?? undefined });
 }
 
 export function defaultView(): View {

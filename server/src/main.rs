@@ -7,6 +7,7 @@ mod config;
 mod db;
 mod error;
 mod events;
+mod google;
 mod position;
 mod prefs;
 mod routes;
@@ -26,6 +27,7 @@ use tracing_subscriber::EnvFilter;
 pub struct AppState {
     pub db: SqlitePool,
     pub events: events::Hub,
+    pub google: std::sync::Arc<google::Google>,
 }
 
 pub fn app(state: AppState) -> Router {
@@ -62,22 +64,31 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(purge_sessions_daily(db.clone()));
 
+    // A Google misconfiguration turns Google off; it never keeps the app from starting.
+    let google_config = google::Config::from_env().unwrap_or_else(|e| {
+        tracing::error!("Google integration off: {e:#}");
+        None
+    });
+    let google = std::sync::Arc::new(google::Google::new(google_config)?);
     let (events, stop_events) = events::Hub::new();
+    let state = AppState {
+        db: db.clone(),
+        events,
+        google: google.clone(),
+    };
+    if google.configured() {
+        tracing::info!("Google integration on; pulling calendars every 15 minutes");
+        tokio::spawn(google::sync::worker(state.clone()));
+    }
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!("listening on http://{}", config.bind);
-    axum::serve(
-        listener,
-        app(AppState {
-            db: db.clone(),
-            events,
-        }),
-    )
-    .with_graceful_shutdown(async move {
-        shutdown_signal().await;
-        // End the open SSE streams, or shutdown would wait on every browser tab.
-        let _ = stop_events.send(true);
-    })
-    .await?;
+    axum::serve(listener, app(state))
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            // End the open SSE streams, or shutdown would wait on every browser tab.
+            let _ = stop_events.send(true);
+        })
+        .await?;
 
     db.close().await;
     tracing::info!("shut down cleanly");

@@ -52,25 +52,41 @@ sudo sh -c 'head -c 32 /dev/urandom > /etc/kanban/token.key'
 sudo chmod 0600 /etc/kanban/token.key
 ```
 
-The systemd unit loads these with `EnvironmentFile=-/etc/kanban/google.env` and
-`LoadCredential=token-key:/etc/kanban/token.key`. Both are optional: without them, the app runs
-with the Google features turned off.
+Then reinstall, so the service picks them up:
 
-For local development, put the same two variables in `.env`, and set
-`KANBAN_TOKEN_KEY_FILE=data/token.key`.
+```bash
+make install
+```
+
+The installer ends with **`Google: on`** when everything is in place. Otherwise it prints the reason,
+for example a missing key or a key that isn't exactly 32 bytes. You can check again at any time:
+
+```bash
+curl -s http://127.0.0.1:8080/api/health         # ... "google":"on"
+journalctl -u kanban -o cat | grep -i google      # "Google integration on" or why it's off
+```
+
+How it's wired: the unit reads `EnvironmentFile=-/etc/kanban/google.env`, and the installer adds a
+drop-in with `LoadCredential=token-key:/etc/kanban/token.key`, but only when the key file exists,
+because systemd won't start a unit whose credential file is missing. Both are optional. Without them,
+or if either is wrong, the app still starts, with the Google features turned off.
+
+For local development, export the same two variables and set `KANBAN_TOKEN_KEY_FILE=data/token.key`.
+`KANBAN_GOOGLE_BASE_URL` points the app at a stand-in Google server instead of the real one. The
+tests in `server/src/tests/google_sync.rs` use one.
 
 ## 5. Connect (each person)
 
-In the app: **Settings → Integrations → Connect Google**.
+In the app: **Settings → Google → Connect Google**.
 
 1. Approve the requested access on Google's page.
-2. Your browser ends up on a page that **fails to load** at `http://127.0.0.1:…/?code=…`. That's expected.
+2. Your browser ends up on a page that **fails to load** at `http://127.0.0.1:8642/?state=…&code=…`. That's expected.
 3. Copy the whole URL from the address bar, paste it into the box in Settings, and click **Finish**.
 4. Choose the calendar for your tasks (the default creates a new **Kanban** calendar) and which of your
    calendars to show in the app's Calendar view. They're pulled every 15 minutes. Nothing is written to
    Google until you press **Push to Google**.
 
-To disconnect, use **Settings → Integrations → Disconnect**. It revokes access at Google too. You can
+To disconnect, use **Settings → Google → Disconnect**. It revokes access at Google too. You can
 also remove access at any time from <https://myaccount.google.com/permissions>.
 
 ## Keep import (optional)

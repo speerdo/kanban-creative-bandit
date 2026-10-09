@@ -1,12 +1,13 @@
 //! JSON API for the task data. Every handler here takes `CurrentUser`, so all of it
 //! requires a session.
 
-mod activity;
+pub mod activity;
+mod calendar;
 mod comments;
 mod labels;
 mod projects;
 mod statuses;
-mod tasks;
+pub mod tasks;
 
 use axum::{Json, Router, extract::State, routing::get};
 use serde::Deserialize;
@@ -23,6 +24,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
         .merge(activity::router())
+        .merge(calendar::router())
         .merge(comments::router())
         .merge(labels::router())
         .merge(projects::router())

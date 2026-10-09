@@ -45,7 +45,7 @@ fn id_list<S: serde::Serializer>(raw: &str, ser: S) -> Result<S::Ok, S::Error> {
     ids.serialize(ser)
 }
 
-const SELECT: &str = "SELECT t.id, t.project_id, t.status_id, t.parent_task_id, t.title,
+pub const SELECT: &str = "SELECT t.id, t.project_id, t.status_id, t.parent_task_id, t.title,
         t.description, t.assignee_id, t.priority, t.due_date, t.start_date, t.position,
         t.completed_at, t.created_by, t.created_at, t.updated_at,
         (SELECT COUNT(*) FROM tasks s WHERE s.parent_task_id = t.id) AS subtask_count,
@@ -561,7 +561,7 @@ async fn remove(
 // ---- helpers ----------------------------------------------------------------------------
 
 /// Broadcasts a task change, plus its parent's (whose subtask counts just changed).
-async fn announce(state: &AppState, by: i64, kind: &'static str, task: &Task) {
+pub async fn announce(state: &AppState, by: i64, kind: &'static str, task: &Task) {
     state.events.send(kind, by, task);
     announce_parent(state, by, task.parent_task_id).await;
 }

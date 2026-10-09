@@ -224,6 +224,10 @@
         return a.to_value === 'none' ? 'cleared the priority' : `set priority to ${a.to_value}`;
       case 'due':
         return a.to_value ? `set the due date to ${day(a.to_value)}` : 'removed the due date';
+      case 'due_google':
+        return a.to_value
+          ? `moved the due date to ${day(a.to_value)} in Google Calendar`
+          : 'deleted its event in Google Calendar, which removed the due date';
       case 'start':
         return a.to_value ? `set the start date to ${day(a.to_value)}` : 'removed the start date';
       case 'title':

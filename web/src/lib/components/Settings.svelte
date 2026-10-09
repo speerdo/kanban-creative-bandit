@@ -1,4 +1,4 @@
-<!-- Settings: appearance (applied live as you click), default view, and profile. Prefs are
+<!-- Settings: appearance (applied live as you click), default view, labels, Google, and profile. Prefs are
      saved per user on the server, so they follow you to every device. -->
 <script lang="ts">
   import { api, type Label, type Prefs, type Status, type Task } from '../api';
@@ -7,6 +7,7 @@
   import Popover from './Popover.svelte';
   import Avatar from './Avatar.svelte';
   import ColorSwatches from './ColorSwatches.svelte';
+  import GoogleSettings from './GoogleSettings.svelte';
   import StatusPill from './StatusPill.svelte';
 
   const prefs = $derived(session.me!.prefs);
@@ -199,6 +200,8 @@
         </ul>
       {/if}
     </section>
+
+    <GoogleSettings />
 
     <section class="panel">
       <h2>Profile</h2>
