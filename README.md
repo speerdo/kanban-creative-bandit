@@ -2,7 +2,8 @@
 
 A small, self-hosted, Asana-style task tracker for a two-person team (Adam & Kat).
 List and board views, fast status changes, strong color coding, light/dark themes,
-and per-user custom colors. Runs as a single Rust binary on our home server and is
+and per-user custom colors, plus a calendar that syncs with Google Calendar and
+Gmail/Drive/Keep hooks. Runs as a single Rust binary on our home server and is
 used from any browser on the home network.
 
 > **Status:** M0 (scaffold): server + frontend skeleton with a health check. See the [roadmap](docs/blueprint.md#8-roadmap).
@@ -45,6 +46,7 @@ Upgrade: `git pull && make install`. Logs: `journalctl -u kanban -f`.
 - [Blueprint](docs/blueprint.md): what we're building and how
 - [Hosting on the home server](docs/hosting.md): running alongside the trading bot
 - [ADR 0001: Tech stack](docs/adr/0001-tech-stack.md)
+- [ADR 0002: Google integration](docs/adr/0002-google-integration.md) and [Google setup](docs/google-setup.md)
 
 ## Planned layout
 
