@@ -114,7 +114,7 @@
     {:else}
       <h2 style:color={ink(status.color)} ondblclick={() => (renaming = true)}>{status.name}</h2>
     {/if}
-    <span class="count">{tasks.length}</span>
+    <span class="count mono">{tasks.length}</span>
 
     <Popover bind:open={menuOpen}>
       {#snippet trigger()}

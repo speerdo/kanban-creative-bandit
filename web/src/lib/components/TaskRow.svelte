@@ -80,7 +80,7 @@
     {:else}
       <button class="title-btn" onclick={() => (editing = true)}>{task.title}</button>
       {#if task.subtask_count > 0}
-        <span class="subs" title="Subtasks">☑ {task.subtasks_done}/{task.subtask_count}</span>
+        <span class="subs mono" title="Subtasks">☑ {task.subtasks_done}/{task.subtask_count}</span>
       {/if}
     {/if}
   </div>

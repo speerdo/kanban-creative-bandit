@@ -26,6 +26,7 @@
   <form class="card" onsubmit={submit}>
     <img src="/favicon.svg" alt="" width="40" height="40" />
     <h1>Kanban</h1>
+    <p class="by mono">by Creative Bandit</p>
 
     <label>
       <span>Username</span>
@@ -59,6 +60,7 @@
     padding: 32px 28px;
     background: var(--surface);
     border: 1px solid var(--border);
+    border-top: 4px solid var(--brand-hot);
     border-radius: var(--radius);
   }
 
@@ -67,9 +69,20 @@
   }
 
   h1 {
-    margin: 0 0 6px;
+    margin: 0;
     text-align: center;
-    font-size: 1.5rem;
+    font-size: 1.6rem;
+    font-stretch: 125%;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .by {
+    margin: -10px 0 6px;
+    text-align: center;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
   }
 
   label {

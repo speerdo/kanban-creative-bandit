@@ -94,8 +94,12 @@
     align-items: center;
     gap: 8px;
     padding: 0 6px 12px;
-    font-weight: 650;
+    font-family: var(--font-heading);
+    font-stretch: 125%;
+    font-weight: 800;
     font-size: 1.05rem;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
   }
 
   .add {
@@ -105,10 +109,11 @@
 
   h3 {
     margin: 8px 8px 4px;
-    font-size: 0.72rem;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 400;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
   }
 

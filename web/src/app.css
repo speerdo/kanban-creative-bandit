@@ -1,5 +1,39 @@
 /* Design tokens. Components use these variables only, never raw colors.
-   M3 expands this into per-user accent/background and an explicit light/dark override. */
+   Brand: creativebandit.studio (paper + near-black base, hot/cold/acid/pink inks; Inter,
+   Archivo and Space Mono). M3 adds per-user accent/background and a light/dark override. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/inter-var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo-var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/space-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/space-mono-700.woff2') format('woff2');
+}
 
 /* Named palette (server/src/validate.rs COLORS). `--c-x` is the solid hue for dots, bars and
    stripes; `--c-x-text` is the same hue at a lightness that reads on tinted surfaces. */
@@ -8,11 +42,11 @@
   --c-slate-text: oklch(0.44 0.004 255);
   --c-red: oklch(0.64 0.170 25);
   --c-red-text: oklch(0.44 0.130 25);
-  --c-orange: oklch(0.64 0.170 50);
+  --c-orange: #e8451f; /* brand */
   --c-orange-text: oklch(0.44 0.130 50);
   --c-amber: oklch(0.76 0.170 75);
   --c-amber-text: oklch(0.44 0.130 75);
-  --c-yellow: oklch(0.76 0.170 95);
+  --c-yellow: #ffe800; /* brand */
   --c-yellow-text: oklch(0.44 0.130 95);
   --c-lime: oklch(0.76 0.170 128);
   --c-lime-text: oklch(0.44 0.130 128);
@@ -22,11 +56,11 @@
   --c-teal-text: oklch(0.44 0.130 180);
   --c-cyan: oklch(0.64 0.170 215);
   --c-cyan-text: oklch(0.44 0.130 215);
-  --c-blue: oklch(0.64 0.170 255);
+  --c-blue: #1b27e8; /* brand */
   --c-blue-text: oklch(0.44 0.130 255);
   --c-violet: oklch(0.64 0.170 290);
   --c-violet-text: oklch(0.44 0.130 290);
-  --c-pink: oklch(0.64 0.170 345);
+  --c-pink: #e5195a; /* brand */
   --c-pink-text: oklch(0.44 0.130 345);
 }
 
@@ -50,7 +84,7 @@
     --c-teal-text: oklch(0.86 0.100 180);
     --c-cyan: oklch(0.70 0.150 215);
     --c-cyan-text: oklch(0.86 0.100 215);
-    --c-blue: oklch(0.70 0.150 255);
+    --c-blue: #6e79ff; /* brand ink-cold-lift */
     --c-blue-text: oklch(0.86 0.100 255);
     --c-violet: oklch(0.70 0.150 290);
     --c-violet-text: oklch(0.86 0.100 290);
@@ -60,38 +94,47 @@
 }
 
 :root {
-  --bg: #f6f6f9;
-  --surface: #ffffff;
-  --surface-2: #f1f1f5;
-  --hover: #f3f3f7;
-  --text: #1c1c24;
-  --text-muted: #646475;
-  --border: #e3e3ea;
-  --accent: #5b5bd6;
+  /* Brand constants (theme-independent). */
+  --brand-base: #0b0b0c;
+  --brand-paper: #ede8df;
+  --brand-hot: #e8451f;
+  --brand-cold: #1b27e8;
+  --brand-acid: #ffe800;
+
+  --bg: var(--brand-paper);
+  --surface: #fbf9f5;
+  --surface-2: #f3efe7;
+  --hover: #f4f0e9;
+  --text: var(--brand-base);
+  --text-muted: #5c574f;
+  --border: #ddd6ca;
+  --accent: var(--brand-cold);
   --accent-text: #ffffff;
-  --ok: #2f9e5b;
-  --bad: #d64545;
+  --ok: #1f8a4c;
+  --bad: #c9361a;
   --shadow: 0 8px 28px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
   --radius: 10px;
   --radius-sm: 6px;
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Archivo', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
   --sidebar: 248px;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111116;
-    --surface: #1b1b22;
-    --surface-2: #23232c;
-    --hover: #262630;
-    --text: #ececf1;
-    --text-muted: #9a9aab;
-    --border: #2c2c36;
-    --accent: #8b8bf0;
-    --accent-text: #111116;
+    --bg: var(--brand-base);
+    --surface: #111113;
+    --surface-2: #17171a;
+    --hover: #1c1c20;
+    --text: var(--brand-paper);
+    --text-muted: #b5aea3;
+    --border: #26262b;
+    --accent: #6e79ff;
+    --accent-text: var(--brand-base);
     --ok: #4fc07e;
-    --bad: #f07070;
+    --bad: #ff6a47;
     --shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
   }
 }
@@ -111,6 +154,19 @@ body {
   font-family: var(--font);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-stretch: 112%;
+}
+
+/* Small labels (counts, section eyebrows, chips) use the brand mono. */
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
 button,
