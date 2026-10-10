@@ -17,7 +17,8 @@
       // Rotate through the palette so new projects don't all look the same.
       const colors = ['blue', 'green', 'violet', 'orange', 'teal', 'pink', 'amber', 'cyan', 'red', 'lime'];
       const p = await api.createProject({ name, color: colors[workspace.projects.length % colors.length] });
-      workspace.projects.push(p);
+      // The live "project created" event can land before this response does.
+      if (!workspace.projects.some((x) => x.id === p.id)) workspace.projects.push(p);
       name = '';
       adding = false;
       go({ name: 'project', id: p.id });
